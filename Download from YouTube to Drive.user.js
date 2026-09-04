@@ -1,12 +1,12 @@
 // ==UserScript==
-// @name         הורדה לדרייב-יוטיוב מאת מטען נייד
-// @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  כפתור הורדה ישירה לדרייב המבוסס על תמונות מעוצבות אישית וחלונית עם קישור מודגש
-// @match        *://*.youtube.com/*
-// @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
+// @name        הורדה לדרייב-יוטיוב מאת מטען נייד
+// @namespace   http://tampermonkey.net/
+// @version     2.2
+// @description כפתור הורדה ישירה לדרייב המבוסס על תמונות מעוצבות אישית וחלונית עם קישור מודגש
+// @match       *://*.youtube.com/*
+// @grant       GM_xmlhttpRequest
+// @grant       GM_setValue
+// @grant       GM_getValue
 // ==/UserScript==
 
 (function() {
@@ -75,7 +75,7 @@
         return {
             height: height,
             cursor: 'pointer',
-            borderRadius: '25px', 
+            borderRadius: '25px',
             boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
             transition: 'transform 0.2s',
             objectFit: 'cover'
@@ -87,8 +87,15 @@
         imgElement.onmouseleave = () => imgElement.style.transform = 'scale(1)';
     }
 
-    function showSuccessModal() {
+    let currentOverlay = null;
+
+    function showModal(emoji, headingText, descriptionText) {
+        if (currentOverlay && currentOverlay.parentNode) {
+            currentOverlay.parentNode.removeChild(currentOverlay);
+        }
+
         const overlay = document.createElement('div');
+        currentOverlay = overlay;
         Object.assign(overlay.style, {
             position: 'fixed', top: '0', left: '0', right: '0', bottom: '0',
             backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: '9999999',
@@ -104,29 +111,29 @@
         });
 
         const icon = document.createElement('div');
-        icon.innerText = '✅';
+        icon.innerText = emoji;
         icon.style.fontSize = '40px'; icon.style.marginBottom = '10px';
 
         const title = document.createElement('h2');
-        title.innerText = 'הבקשה נשלחה!';
+        title.innerText = headingText;
         title.style.margin = '0 0 10px 0'; title.style.color = '#333';
 
         const desc = document.createElement('p');
-        desc.innerText = 'השרת מטפל כרגע בבקשה.\nתוך דקה-שתיים תקבל למייל קישור להורדה.';
+        desc.innerText = descriptionText;
         desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
 
         // קופסת הקרדיט המעוצבת
         const devBox = document.createElement('div');
         Object.assign(devBox.style, { margin: '20px 0', padding: '15px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' });
-        
+
         const devText1 = document.createElement('div');
         devText1.innerText = 'פותח על ידי מטען נייד ממתמחים טופ';
         Object.assign(devText1.style, { color: '#444', fontWeight: 'bold', marginBottom: '8px', fontSize: '15px' });
-        
+
         const devText2 = document.createElement('div');
         devText2.innerText = 'לפרופיל שלי לחצו ';
         Object.assign(devText2.style, { color: '#555', fontSize: '14px' });
-        
+
         const devLink = document.createElement('a');
         devLink.href = 'https://mitmachim.top/user/%D7%9E%D7%98%D7%A2%D7%9F-%D7%A0%D7%99%D7%99%D7%93';
         devLink.target = '_blank';
@@ -134,11 +141,11 @@
         Object.assign(devLink.style, { color: '#3182CE', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' });
 
         const fingerIcon = document.createElement('span');
-        fingerIcon.innerText = ' 👉'; // האצבע הוחלפה לכיוון ימין
-        
+        fingerIcon.innerText = ' 👉';
+
         devText2.appendChild(devLink);
         devText2.appendChild(fingerIcon);
-        
+
         devBox.appendChild(devText1);
         devBox.appendChild(devText2);
 
@@ -152,6 +159,7 @@
 
         closeBtn.onclick = () => {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            currentOverlay = null;
         };
 
         modal.appendChild(icon);
@@ -166,9 +174,11 @@
     function triggerDownload(format, optionsDiv) {
         const email = GM_getValue("userEmail", "");
         const currentUrl = window.location.href;
-        
+
         optionsDiv.style.display = 'none';
-        showSuccessModal();
+
+        // מציג מיד חלונית ראשונית או שומר למעקב
+        showModal('⏳', 'הבקשה נשלחה!', 'השרת מטפל כרגע בבקשה.\nתוך דקה-שתיים תקבל למייל קישור להורדה.');
 
         GM_xmlhttpRequest({
             method: "POST",
@@ -176,12 +186,34 @@
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({ url: currentUrl, email: email, format: format }),
             onload: function(response) {
+                console.log("תשובת שרת מלאה:", response.responseText);
                 try {
                     const res = JSON.parse(response.responseText);
-                    if (!res.success && (res.error === "האימייל אינו מורשה במערכת." || res.error.includes("חסום"))) {
-                        GM_setValue("userEmail", ""); 
+
+                    // בדיקת הגעה למכסה (אפליקציה או טופס סגור)
+                    if (res.error === "limit_reached" || (res.error && res.error.includes("המכסה היומית"))) {
+                        showModal('⚠️', 'הסתיימה המכסה היומית', 'המערכת הגיעה למכסה היומית של 100 קבצים.\nניתן לנסות שוב לאחר חצות.');
+                        return;
                     }
-                } catch (e) {}
+
+                    // בדיקת שגיאות שרת או שגיאות כלליות של yt-dlp / בוטים
+                    if (res.error || (res.success === false)) {
+                        showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                        return;
+                    }
+
+                    if (!res.success && (res.error === "האימייל אינו מורשה במערכת." || res.error.includes("חסום"))) {
+                        GM_setValue("userEmail", "");
+                    }
+                } catch (e) {
+                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
+                    // במקרה של שגיאת פיענוח או נפילת שרת מוחלטת
+                    showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                }
+            },
+            onerror: function(err) {
+                console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
+                showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
             }
         });
     }
