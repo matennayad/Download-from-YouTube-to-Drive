@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     2.2
+// @version     2.7
 // @description כפתור הורדה ישירה לדרייב המבוסס על תמונות מעוצבות אישית וחלונית עם קישור מודגש
 // @match       *://*.youtube.com/*
 // @grant       GM_xmlhttpRequest
@@ -33,14 +33,12 @@
             borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
         });
 
-        // כפתור וידאו מתמונה - גודל 70px
         const videoBtn = document.createElement('img');
         videoBtn.src = 'https://i.postimg.cc/gc19BRzZ/Gemini-Generated-Image-wcg6lawcg6lawcg6.jpg';
         Object.assign(videoBtn.style, getImgStyle('70px'));
         videoBtn.onclick = () => triggerDownload('video', optionsDiv);
         addHoverEffect(videoBtn);
 
-        // כפתור אודיו מתמונה - גודל 70px
         const audioBtn = document.createElement('img');
         audioBtn.src = 'https://i.postimg.cc/kMLrh8J6/Gemini-Generated-Image-1a7koh1a7koh1a7k.jpg';
         Object.assign(audioBtn.style, getImgStyle('70px'));
@@ -50,7 +48,6 @@
         optionsDiv.appendChild(videoBtn);
         optionsDiv.appendChild(audioBtn);
 
-        // כפתור ראשי מתמונה - גודל 90px
         const mainBtn = document.createElement('img');
         mainBtn.id = 'drive-download-btn';
         mainBtn.src = 'https://i.postimg.cc/2jgpXvkB/Gemini-Generated-Image-uwb0qfuwb0qfuwb0.jpg';
@@ -58,9 +55,14 @@
         mainBtn.onclick = () => {
             let email = GM_getValue("userEmail", "");
             if (!email) {
-                email = prompt("הכנס כתובת מייל מורשית להורדה:");
-                if (!email) return;
-                GM_setValue("userEmail", email.trim().toLowerCase());
+                showInputModal("📧 הזנת מייל מורשה", "הכנס את כתובת המייל שלך לשימוש בתוסף:", (inputEmail) => {
+                    if (inputEmail && inputEmail.includes('@')) {
+                        GM_setValue("userEmail", inputEmail.trim().toLowerCase());
+                        // לאחר הזנת המייל הראשונית, נציג מיד את כפתורי בחירת הפורמט (או נמשיך הלאה)
+                        optionsDiv.style.display = 'flex';
+                    }
+                });
+                return;
             }
             optionsDiv.style.display = optionsDiv.style.display === 'none' ? 'flex' : 'none';
         };
@@ -122,7 +124,6 @@
         desc.innerText = descriptionText;
         desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
 
-        // קופסת הקרדיט המעוצבת
         const devBox = document.createElement('div');
         Object.assign(devBox.style, { margin: '20px 0', padding: '15px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' });
 
@@ -145,7 +146,6 @@
 
         devText2.appendChild(devLink);
         devText2.appendChild(fingerIcon);
-
         devBox.appendChild(devText1);
         devBox.appendChild(devText2);
 
@@ -171,43 +171,140 @@
         document.body.appendChild(overlay);
     }
 
-    function triggerDownload(format, optionsDiv) {
-        const email = GM_getValue("userEmail", "");
+    function showInputModal(headingText, descriptionText, onSubmitCallback) {
+        if (currentOverlay && currentOverlay.parentNode) {
+            currentOverlay.parentNode.removeChild(currentOverlay);
+        }
+
+        const overlay = document.createElement('div');
+        currentOverlay = overlay;
+        Object.assign(overlay.style, {
+            position: 'fixed', top: '0', left: '0', right: '0', bottom: '0',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: '9999999',
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            fontFamily: 'Arial, sans-serif'
+        });
+
+        const modal = document.createElement('div');
+        Object.assign(modal.style, {
+            backgroundColor: '#fff', padding: '30px', borderRadius: '15px',
+            textAlign: 'center', maxWidth: '400px', width: '100%', boxShadow: '0 5px 20px rgba(0,0,0,0.3)',
+            direction: 'rtl'
+        });
+
+        const title = document.createElement('h2');
+        title.innerText = headingText;
+        title.style.margin = '0 0 10px 0'; title.style.color = '#333';
+
+        const desc = document.createElement('p');
+        desc.innerText = descriptionText;
+        desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        Object.assign(input.style, {
+            width: '90%', padding: '10px', margin: '15px 0', fontSize: '16px',
+            borderRadius: '8px', border: '1px solid #ccc', textAlign: 'center', outline: 'none'
+        });
+
+        const btnContainer = document.createElement('div');
+        Object.assign(btnContainer.style, { display: 'flex', gap: '10px', marginTop: '10px' });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.innerText = 'אישור';
+        Object.assign(submitBtn.style, {
+            background: '#3182CE', color: 'white', border: 'none', padding: '10px 20px',
+            borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', flex: '1', fontSize: '16px'
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.innerText = 'ביטול';
+        Object.assign(cancelBtn.style, {
+            background: '#E2E8F0', color: '#333', border: 'none', padding: '10px 20px',
+            borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', flex: '1', fontSize: '16px'
+        });
+
+        submitBtn.onclick = () => {
+            const val = input.value;
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            currentOverlay = null;
+            if (onSubmitCallback) onSubmitCallback(val);
+        };
+
+        cancelBtn.onclick = () => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            currentOverlay = null;
+        };
+
+        btnContainer.appendChild(submitBtn);
+        btnContainer.appendChild(cancelBtn);
+
+        modal.appendChild(title);
+        modal.appendChild(desc);
+        modal.appendChild(input);
+        modal.appendChild(btnContainer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        input.focus();
+    }
+
+    function triggerDownload(format, optionsDiv, verificationCode = null) {
+        let email = GM_getValue("userEmail", "");
         const currentUrl = window.location.href;
 
         optionsDiv.style.display = 'none';
 
-        // מציג מיד חלונית ראשונית או שומר למעקב
-        showModal('⏳', 'הבקשה נשלחה!', 'השרת מטפל כרגע בבקשה.\nתוך דקה-שתיים תקבל למייל קישור להורדה.');
+        // אם אין מייל כלל, נציג קודם את חלונית הזנת המייל המעוצבת ולאחר מכן נמשיך מיד להורדה
+        if (!email) {
+            showInputModal("📧 הזנת מייל מורשה", "הכנס את כתובת המייל שלך לשימוש בתוסף:", (inputEmail) => {
+                if (inputEmail && inputEmail.includes('@')) {
+                    email = inputEmail.trim().toLowerCase();
+                    GM_setValue("userEmail", email);
+                    triggerDownload(format, optionsDiv, verificationCode);
+                }
+            });
+            return;
+        }
+
+        // אם יש קוד אימות - נציג טעינה שקטה, אחרת לא מציגים את שעון החול המעצבן עד שהשרת יחזיר תשובה אמיתית
+        const requestData = { url: currentUrl, email: email, format: format };
+        if (verificationCode) {
+            requestData.verificationCode = verificationCode;
+        }
 
         GM_xmlhttpRequest({
             method: "POST",
             url: WEB_APP_URL,
             headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({ url: currentUrl, email: email, format: format }),
+            data: JSON.stringify(requestData),
             onload: function(response) {
                 console.log("תשובת שרת מלאה:", response.responseText);
                 try {
                     const res = JSON.parse(response.responseText);
 
-                    // בדיקת הגעה למכסה (אפליקציה או טופס סגור)
+                    if (res.needsVerification) {
+                        showInputModal("🔑 אימות כתובת מייל", "שלחנו קוד אימות בן 6 ספרות למייל שלך.\nהכנס את הקוד כאן:", (codeInput) => {
+                            if (codeInput && codeInput.trim().length === 6) {
+                                triggerDownload(format, optionsDiv, codeInput.trim());
+                            }
+                        });
+                        return;
+                    }
+
                     if (res.error === "limit_reached" || (res.error && res.error.includes("המכסה היומית"))) {
                         showModal('⚠️', 'הסתיימה המכסה היומית', 'המערכת הגיעה למכסה היומית של 100 קבצים.\nניתן לנסות שוב לאחר חצות.');
                         return;
                     }
 
-                    // בדיקת שגיאות שרת או שגיאות כלליות של yt-dlp / בוטים
                     if (res.error || (res.success === false)) {
-                        showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                        showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
                         return;
                     }
 
-                    if (!res.success && (res.error === "האימייל אינו מורשה במערכת." || res.error.includes("חסום"))) {
-                        GM_setValue("userEmail", "");
-                    }
+                    showModal('✅', 'ההורדה הושלמה בהצלחה!', 'הסרטון ירד ועלה לדרייב בהצלחה.\n\nקישור להורדה:\n' + res.driveLink);
+
                 } catch (e) {
                     console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    // במקרה של שגיאת פיענוח או נפילת שרת מוחלטת
                     showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
                 }
             },
