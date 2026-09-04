@@ -75,7 +75,7 @@
         return {
             height: height,
             cursor: 'pointer',
-            borderRadius: '25px',
+            borderRadius: '25px', 
             boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
             transition: 'transform 0.2s',
             objectFit: 'cover'
@@ -118,15 +118,15 @@
         // קופסת הקרדיט המעוצבת
         const devBox = document.createElement('div');
         Object.assign(devBox.style, { margin: '20px 0', padding: '15px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' });
-
+        
         const devText1 = document.createElement('div');
         devText1.innerText = 'פותח על ידי מטען נייד ממתמחים טופ';
         Object.assign(devText1.style, { color: '#444', fontWeight: 'bold', marginBottom: '8px', fontSize: '15px' });
-
+        
         const devText2 = document.createElement('div');
         devText2.innerText = 'לפרופיל שלי לחצו ';
         Object.assign(devText2.style, { color: '#555', fontSize: '14px' });
-
+        
         const devLink = document.createElement('a');
         devLink.href = 'https://mitmachim.top/user/%D7%9E%D7%98%D7%A2%D7%9F-%D7%A0%D7%99%D7%99%D7%93';
         devLink.target = '_blank';
@@ -135,10 +135,10 @@
 
         const fingerIcon = document.createElement('span');
         fingerIcon.innerText = ' 👉'; // האצבע הוחלפה לכיוון ימין
-
+        
         devText2.appendChild(devLink);
         devText2.appendChild(fingerIcon);
-
+        
         devBox.appendChild(devText1);
         devBox.appendChild(devText2);
 
@@ -166,7 +166,7 @@
     function triggerDownload(format, optionsDiv) {
         const email = GM_getValue("userEmail", "");
         const currentUrl = window.location.href;
-
+        
         optionsDiv.style.display = 'none';
         showSuccessModal();
 
@@ -179,7 +179,7 @@
                 try {
                     const res = JSON.parse(response.responseText);
                     if (!res.success && (res.error === "האימייל אינו מורשה במערכת." || res.error.includes("חסום"))) {
-                        GM_setValue("userEmail", "");
+                        GM_setValue("userEmail", ""); 
                     }
                 } catch (e) {}
             }
