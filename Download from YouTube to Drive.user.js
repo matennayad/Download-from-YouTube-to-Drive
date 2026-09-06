@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     2.7
-// @description כפתור הורדה ישירה לדרייב המבוסס על תמונות מעוצבות אישית וחלונית עם קישור מודגש
+// @version     3.0
+// @description כפתור הורדה ישירה לדרייב, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
 // @grant       GM_xmlhttpRequest
 // @grant       GM_setValue
@@ -13,6 +13,25 @@
     'use strict';
 
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwT34zd8XK8pmEnALIacYVLq0N6_3QDE9F_qCNFD4c5yhTgPi32Yj1FWA6FpiJSLqXH/exec";
+
+    // רשימת שגיאות "ידועות" שמוצגות כמו שהן (לא מוחלפות בהודעת IP הגנרית)
+    const KNOWN_ERROR_SNIPPETS = [
+        "מכסה השעתית",
+        "חסום",
+        "קישור לא תקין",
+        "המכסה היומית",
+        "חסר קישור",
+        "חסר אימייל"
+    ];
+
+    function isKnownError(errText) {
+        if (!errText) return false;
+        return KNOWN_ERROR_SNIPPETS.some(function (snippet) {
+            return errText.indexOf(snippet) !== -1;
+        });
+    }
+
+    let isRequestInFlight = false;
 
     function createFloatingMenu() {
         if (document.getElementById('drive-download-container')) return;
@@ -52,25 +71,153 @@
         mainBtn.id = 'drive-download-btn';
         mainBtn.src = 'https://i.postimg.cc/2jgpXvkB/Gemini-Generated-Image-uwb0qfuwb0qfuwb0.jpg';
         Object.assign(mainBtn.style, getImgStyle('90px'));
+
         mainBtn.onclick = () => {
+            if (isRequestInFlight) return; // מתעלמים מלחיצות בזמן טעינה
+
             let email = GM_getValue("userEmail", "");
+
             if (!email) {
                 showInputModal("📧 הזנת מייל מורשה", "הכנס את כתובת המייל שלך לשימוש בתוסף:", (inputEmail) => {
                     if (inputEmail && inputEmail.includes('@')) {
-                        GM_setValue("userEmail", inputEmail.trim().toLowerCase());
-                        // לאחר הזנת המייל הראשונית, נציג מיד את כפתורי בחירת הפורמט (או נמשיך הלאה)
-                        optionsDiv.style.display = 'flex';
+                        email = inputEmail.trim().toLowerCase();
+                        GM_setValue("userEmail", email);
+                        GM_setValue("deviceToken", ""); // מייל חדש = מתחילים אימות מכשיר מאפס
+                        checkAuthAndShowOptions(email, optionsDiv);
                     }
                 });
                 return;
             }
-            optionsDiv.style.display = optionsDiv.style.display === 'none' ? 'flex' : 'none';
+
+            // אם האופציות כבר גלויות - רק סוגרים אותן, בלי לבדוק סטטוס שוב
+            if (optionsDiv.style.display === 'flex') {
+                optionsDiv.style.display = 'none';
+                return;
+            }
+
+            checkAuthAndShowOptions(email, optionsDiv);
         };
         addHoverEffect(mainBtn);
 
         container.appendChild(optionsDiv);
         container.appendChild(mainBtn);
         document.body.appendChild(container);
+    }
+
+    // בודק מול השרת האם המכשיר הזה מאומת למייל הזה, לפני שמציגים וידאו/אודיו בכלל
+    function checkAuthAndShowOptions(email, optionsDiv) {
+        setLoadingState(true);
+        const deviceToken = GM_getValue("deviceToken", "");
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: WEB_APP_URL,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify({ action: "checkStatus", email: email, deviceToken: deviceToken }),
+            onload: function(response) {
+                setLoadingState(false);
+                try {
+                    const res = JSON.parse(response.responseText);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.success && res.authenticated) {
+                        optionsDiv.style.display = 'flex';
+                        return;
+                    }
+
+                    if (res.needsVerification) {
+                        showInputModal("🔑 אימות מכשיר חדש", res.error || "שלחנו קוד אימות בן 6 ספרות למייל שלך. הכנס אותו כאן:", (codeInput) => {
+                            if (codeInput && codeInput.trim().length === 6) {
+                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
+                            }
+                        });
+                        return;
+                    }
+
+                    showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+
+                } catch (e) {
+                    showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                }
+            },
+            onerror: function() {
+                setLoadingState(false);
+                showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+            }
+        });
+    }
+
+    // שולח קוד אימות שהוזן, ואם תקין - מקבל טוקן מכשיר ומציג את כפתורי הפורמט
+    function submitVerificationCode(email, code, optionsDiv) {
+        setLoadingState(true);
+        const deviceToken = GM_getValue("deviceToken", "");
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: WEB_APP_URL,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify({ action: "checkStatus", email: email, deviceToken: deviceToken, verificationCode: code }),
+            onload: function(response) {
+                setLoadingState(false);
+                try {
+                    const res = JSON.parse(response.responseText);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.success && res.authenticated) {
+                        optionsDiv.style.display = 'flex';
+                        return;
+                    }
+
+                    if (res.needsVerification) {
+                        // קוד שגוי - שואלים שוב, הפעם עם ההודעה שמציינת שהקוד שגוי
+                        showInputModal("🔑 אימות מכשיר חדש", res.error || "קוד שגוי, נסה שוב:", (codeInput) => {
+                            if (codeInput && codeInput.trim().length === 6) {
+                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
+                            }
+                        });
+                        return;
+                    }
+
+                    showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+
+                } catch (e) {
+                    showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                }
+            },
+            onerror: function() {
+                setLoadingState(false);
+                showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+            }
+        });
+    }
+
+    // מצב טעינה: נועל את הכפתורים חזותית ומונע לחיצות כפולות
+    function setLoadingState(isLoading) {
+        isRequestInFlight = isLoading;
+        const btn = document.getElementById('drive-download-btn');
+        if (!btn) return;
+
+        if (isLoading) {
+            btn.style.opacity = '0.5';
+            btn.style.filter = 'grayscale(60%)';
+            btn.style.animation = 'drive-download-pulse 1s infinite';
+            if (!document.getElementById('drive-download-pulse-style')) {
+                const style = document.createElement('style');
+                style.id = 'drive-download-pulse-style';
+                style.innerText = '@keyframes drive-download-pulse { 0% { transform: scale(1); } 50% { transform: scale(0.93); } 100% { transform: scale(1); } }';
+                document.head.appendChild(style);
+            }
+        } else {
+            btn.style.opacity = '1';
+            btn.style.filter = 'none';
+            btn.style.animation = 'none';
+        }
     }
 
     function getImgStyle(height) {
@@ -91,7 +238,8 @@
 
     let currentOverlay = null;
 
-    function showModal(emoji, headingText, descriptionText) {
+    // חלונית הודעה, עם תמיכה אופציונלית בקישור לחיץ (לדרייב)
+    function showModal(emoji, headingText, descriptionText, linkUrl) {
         if (currentOverlay && currentOverlay.parentNode) {
             currentOverlay.parentNode.removeChild(currentOverlay);
         }
@@ -124,6 +272,25 @@
         desc.innerText = descriptionText;
         desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
 
+        modal.appendChild(icon);
+        modal.appendChild(title);
+        modal.appendChild(desc);
+
+        // קישור לחיץ לדרייב, אם סופק
+        if (linkUrl) {
+            const linkBtn = document.createElement('a');
+            linkBtn.href = linkUrl;
+            linkBtn.target = '_blank';
+            linkBtn.rel = 'noopener noreferrer';
+            linkBtn.innerText = '📂 פתח את הקובץ בדרייב';
+            Object.assign(linkBtn.style, {
+                display: 'block', background: '#34A853', color: 'white', textDecoration: 'none',
+                padding: '12px 20px', borderRadius: '20px', fontWeight: 'bold', fontSize: '15px',
+                margin: '15px 0'
+            });
+            modal.appendChild(linkBtn);
+        }
+
         const devBox = document.createElement('div');
         Object.assign(devBox.style, { margin: '20px 0', padding: '15px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' });
 
@@ -146,6 +313,7 @@
 
         devText2.appendChild(devLink);
         devText2.appendChild(fingerIcon);
+
         devBox.appendChild(devText1);
         devBox.appendChild(devText2);
 
@@ -162,9 +330,6 @@
             currentOverlay = null;
         };
 
-        modal.appendChild(icon);
-        modal.appendChild(title);
-        modal.appendChild(desc);
         modal.appendChild(devBox);
         modal.appendChild(closeBtn);
         overlay.appendChild(modal);
@@ -248,47 +413,29 @@
         input.focus();
     }
 
-    function triggerDownload(format, optionsDiv, verificationCode = null) {
-        let email = GM_getValue("userEmail", "");
+    // מבצע את ההורדה בפועל (נקרא רק אחרי שכבר עברנו אימות בהצלחה)
+    function triggerDownload(format, optionsDiv) {
+        if (isRequestInFlight) return;
+
+        const email = GM_getValue("userEmail", "");
+        const deviceToken = GM_getValue("deviceToken", "");
         const currentUrl = window.location.href;
 
         optionsDiv.style.display = 'none';
-
-        // אם אין מייל כלל, נציג קודם את חלונית הזנת המייל המעוצבת ולאחר מכן נמשיך מיד להורדה
-        if (!email) {
-            showInputModal("📧 הזנת מייל מורשה", "הכנס את כתובת המייל שלך לשימוש בתוסף:", (inputEmail) => {
-                if (inputEmail && inputEmail.includes('@')) {
-                    email = inputEmail.trim().toLowerCase();
-                    GM_setValue("userEmail", email);
-                    triggerDownload(format, optionsDiv, verificationCode);
-                }
-            });
-            return;
-        }
-
-        // אם יש קוד אימות - נציג טעינה שקטה, אחרת לא מציגים את שעון החול המעצבן עד שהשרת יחזיר תשובה אמיתית
-        const requestData = { url: currentUrl, email: email, format: format };
-        if (verificationCode) {
-            requestData.verificationCode = verificationCode;
-        }
+        setLoadingState(true);
 
         GM_xmlhttpRequest({
             method: "POST",
             url: WEB_APP_URL,
             headers: { "Content-Type": "application/json" },
-            data: JSON.stringify(requestData),
+            data: JSON.stringify({ url: currentUrl, email: email, format: format, deviceToken: deviceToken }),
             onload: function(response) {
-                console.log("תשובת שרת מלאה:", response.responseText);
+                setLoadingState(false);
                 try {
                     const res = JSON.parse(response.responseText);
 
-                    if (res.needsVerification) {
-                        showInputModal("🔑 אימות כתובת מייל", "שלחנו קוד אימות בן 6 ספרות למייל שלך.\nהכנס את הקוד כאן:", (codeInput) => {
-                            if (codeInput && codeInput.trim().length === 6) {
-                                triggerDownload(format, optionsDiv, codeInput.trim());
-                            }
-                        });
-                        return;
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
                     }
 
                     if (res.error === "limit_reached" || (res.error && res.error.includes("המכסה היומית"))) {
@@ -296,21 +443,35 @@
                         return;
                     }
 
-                    if (res.error || (res.success === false)) {
-                        showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    if (res.needsVerification) {
+                        // הטוקן שהיה לנו כנראה כבר לא תקף (למשל נמחק ידנית) - חוזרים לתהליך אימות מהתחלה
+                        showInputModal("🔑 אימות מכשיר חדש", res.error || "שלחנו קוד אימות בן 6 ספרות למייל שלך. הכנס אותו כאן:", (codeInput) => {
+                            if (codeInput && codeInput.trim().length === 6) {
+                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
+                            }
+                        });
                         return;
                     }
 
-                    showModal('✅', 'ההורדה הושלמה בהצלחה!', 'הסרטון ירד ועלה לדרייב בהצלחה.\n\nקישור להורדה:\n' + res.driveLink);
+                    if (res.error || (res.success === false)) {
+                        const friendlyIpMessage = 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.';
+                        const messageToShow = isKnownError(res.error) ? res.error : friendlyIpMessage;
+                        showModal('❌', 'שגיאה', messageToShow);
+                        return;
+                    }
+
+                    // הצלחה - חלונית עם קישור לחיץ לדרייב
+                    showModal('✅', 'ההורדה הושלמה בהצלחה!', 'הסרטון ירד ועלה לדרייב בהצלחה.', res.driveLink);
 
                 } catch (e) {
                     console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    showModal('❌', 'שגיאה', 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.');
                 }
             },
             onerror: function(err) {
+                setLoadingState(false);
                 console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
-                showModal('❌', 'שגיאת שרת', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                showModal('❌', 'שגיאה', 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.');
             }
         });
     }
