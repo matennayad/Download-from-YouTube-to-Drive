@@ -4,6 +4,9 @@
 // @version     4.0
 // @description כפתור הורדה ישירה לדרייב - סרטון בודד או ערוץ שלם, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
+// @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
+// @downloadURL https://raw.githubusercontent.com/matennayad/Download-from-YouTube-to-Drive/main/Download%20from%20YouTube%20to%20Drive.user.js
+// @updateURL   https://raw.githubusercontent.com/matennayad/Download-from-YouTube-to-Drive/main/Download%20from%20YouTube%20to%20Drive.user.js
 // @grant       GM_xmlhttpRequest
 // @grant       GM_setValue
 // @grant       GM_getValue
