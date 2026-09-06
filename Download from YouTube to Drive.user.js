@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     4.0
+// @version     4.1
 // @description כפתור הורדה ישירה לדרייב - סרטון בודד או ערוץ שלם, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -17,21 +17,47 @@
 
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwT34zd8XK8pmEnALIacYVLq0N6_3QDE9F_qCNFD4c5yhTgPi32Yj1FWA6FpiJSLqXH/exec";
 
-    // רשימת שגיאות "ידועות" שמוצגות כמו שהן (לא מוחלפות בהודעת IP הגנרית)
-    const KNOWN_ERROR_SNIPPETS = [
-        "מכסה השעתית",
-        "חסום",
-        "קישור לא תקין",
-        "המכסה היומית",
-        "חסר קישור",
-        "חסר אימייל"
-    ];
+    // הצגת שגיאה שהגיעה מהשרת.
+    //
+    // בעבר כל שגיאה שלא הופיעה ברשימה קצרה של מחרוזות מוכרות הוחלפה
+    // בהודעה "יוטיוב חסם אותנו, נסו בעוד 20 דקות". זה הסתיר את הסיבה
+    // האמיתית והציג למשתמש מידע שגוי - למשל כשהתקלה הייתה בהגדרות
+    // ולא ביוטיוב בכלל. עכשיו מוצג מה שהשרת באמת אמר.
+    //
+    // הודעות מהשרת שלנו כתובות בעברית ומיועדות למשתמש, אז הן מוצגות
+    // כמו שהן. שגיאה טכנית באנגלית (yt-dlp, חריגה בקוד) מקבלת הסבר
+    // בעברית, והטקסט המקורי מופיע מתחתיו כדי שאפשר יהיה לדווח עליו.
 
-    function isKnownError(errText) {
-        if (!errText) return false;
-        return KNOWN_ERROR_SNIPPETS.some(function (snippet) {
-            return errText.indexOf(snippet) !== -1;
-        });
+    function showServerError(errText, fallbackTitle) {
+
+        const text = (errText || '').toString().trim();
+
+        if (!text) {
+            showModal('❌', fallbackTitle || 'שגיאה',
+                'השרת לא החזיר סיבה.\n\n' +
+                'כדאי לבדוק בגיליון "לוג שגיאות ובקשות" מה נרשם שם.');
+            return;
+        }
+
+        // עברית = הודעה שנכתבה עבור המשתמש
+        if (/[\u0590-\u05FF]/.test(text)) {
+            showModal('❌', fallbackTitle || 'שגיאה', text);
+            return;
+        }
+
+        showModal('❌', 'ההורדה נכשלה',
+            'ההורדה נכשלה מסיבה טכנית.\n' +
+            'לרוב זה זמני - כדאי לנסות שוב בעוד כמה דקות.\n\n' +
+            'פירוט:\n' + text.substring(0, 300));
+    }
+
+
+    // כשאין תשובה מהשרת בכלל - תקלת רשת או פריסה שלא עודכנה
+    function showConnectionError() {
+        showModal('❌', 'אין תשובה מהשרת',
+            'לא הצלחנו לקבל תשובה מהשרת.\n\n' +
+            'אם זה חוזר: לוודא שה-Web App פרוס בגרסה העדכנית, ' +
+            'ושיש חיבור לאינטרנט.');
     }
 
     let isRequestInFlight = false;
@@ -242,15 +268,20 @@
                         return;
                     }
 
-                    showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    showServerError(res.error);
 
                 } catch (e) {
-                    showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
+                    showModal('❌', 'תשובה לא תקינה מהשרת',
+                        'השרת החזיר משהו שאינו JSON.\n\n' +
+                        'לרוב זה אומר שה-Web App לא פרוס בגרסה העדכנית.\n\n' +
+                        'תחילת התשובה:\n' +
+                        (response.responseText || '').substring(0, 200));
                 }
             },
             onerror: function() {
                 setLoadingState(false);
-                showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                showConnectionError();
             }
         });
     }
@@ -289,15 +320,20 @@
                         return;
                     }
 
-                    showModal('❌', 'שגיאה', res.error || 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    showServerError(res.error);
 
                 } catch (e) {
-                    showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
+                    showModal('❌', 'תשובה לא תקינה מהשרת',
+                        'השרת החזיר משהו שאינו JSON.\n\n' +
+                        'לרוב זה אומר שה-Web App לא פרוס בגרסה העדכנית.\n\n' +
+                        'תחילת התשובה:\n' +
+                        (response.responseText || '').substring(0, 200));
                 }
             },
             onerror: function() {
                 setLoadingState(false);
-                showModal('❌', 'שגיאה', 'שגיאת שרת, נא לנסות שוב בעוד 20 דקות.');
+                showConnectionError();
             }
         });
     }
@@ -1029,9 +1065,7 @@
                     }
 
                     if (res.error || (res.success === false)) {
-                        const friendlyIpMessage = 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.';
-                        const messageToShow = isKnownError(res.error) ? res.error : friendlyIpMessage;
-                        showModal('❌', 'שגיאה', messageToShow);
+                        showServerError(res.error);
                         return;
                     }
 
@@ -1040,13 +1074,18 @@
 
                 } catch (e) {
                     console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    showModal('❌', 'שגיאה', 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.');
+                    showModal('❌', 'תשובה לא תקינה מהשרת',
+                        'השרת החזיר משהו שאינו JSON.\n\n' +
+                        'זה קורה בדרך כלל כשה-Web App לא פרוס בגרסה ' +
+                        'העדכנית, או כשגוגל מחזירה דף שגיאה.\n\n' +
+                        'תחילת התשובה:\n' +
+                        (response.responseText || '').substring(0, 200));
                 }
             },
             onerror: function(err) {
                 setLoadingState(false);
                 console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
-                showModal('❌', 'שגיאה', 'עקב בקשות רבות מדי לשרת יוטיוב, השרת שלנו נחסם זמנית על ידי יוטיוב.\nאנא נסו שוב בעוד כ-20 דקות.');
+                showConnectionError();
             }
         });
     }
