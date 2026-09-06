@@ -736,16 +736,20 @@
                 // שומרים בלוג המקומי כל מה שכבר ירד, גם באמצע העבודה
                 addToChannelLog(channelUrl, format, res.downloadedIds || []);
 
-                if (res.status === 'done' || res.status === 'error') {
+                if (res.status === 'done' ||
+                    res.status === 'error' ||
+                    res.status === 'cancelled') {
 
                     GM_setValue("activeJob", "");
 
                     const title = res.status === 'error'
                         ? 'העבודה נעצרה'
-                        : 'הורדת הערוץ הסתיימה';
+                        : (res.status === 'cancelled'
+                            ? 'ההורדה בוטלה'
+                            : 'הורדת הערוץ הסתיימה');
 
                     showModal(
-                        res.status === 'error' ? '⚠️' : '✅',
+                        res.status === 'done' ? '✅' : '⚠️',
                         title,
                         '✅ ירדו: ' + res.done + '\n' +
                         '❌ נכשלו: ' + res.failed + '\n' +
