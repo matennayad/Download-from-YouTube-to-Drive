@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -163,10 +163,13 @@
 
         if (!img || img.tagName !== "IMG") return false;
 
-        // גודל טבעי או גודל מוצג (תמונה שטרם נטענה עד הסוף עשויה
-        // לדווח רק על הגודל המוצג)
-        const w = img.naturalWidth || img.clientWidth || 0;
-        const h = img.naturalHeight || img.clientHeight || 0;
+        // גודל טבעי או גודל מוצג. תמונה שנכשלה בטעינה (למשל חסימת
+        // נטפרי על שרת התמונות) מדווחת naturalWidth=0 אבל עדיין
+        // מוצגת בגודל מלא בעמוד - גם אותה רוצים לתפוס, כי השרת
+        // יכול לשלוף אותה לבד מהכתובת.
+        const loaded = (img.naturalWidth || 0) > 0;
+        const w = loaded ? img.naturalWidth : (img.clientWidth || 0);
+        const h = loaded ? img.naturalHeight : (img.clientHeight || 0);
         if (w < MIN_IMAGE_SIZE || h < MIN_IMAGE_SIZE) return false;
 
         const src = img.currentSrc || img.src || "";
@@ -262,11 +265,15 @@
 
         const prompt = findPromptFor(img);
 
+        // תמונה שנכשלה בטעינה בדפדפן - ניסיון fetch ייכשל גם כן.
+        // עוברים ישר לגיבוי: השרת שולף מהכתובת הפומבית.
+        const broken = img.complete && (img.naturalWidth || 0) === 0;
+
         // מפתח לפי המקור כבר עכשיו - כדי לא לתפוס את אותה תמונה
         // שוב בזמן שההורדה ל-dataURL מתבצעת
         const srcKey = keyForSrc(src);
 
-        if (src.startsWith("data:image")) {
+        if (!broken && src.startsWith("data:image")) {
             return {
                 key: keyForDataURL(src),
                 srcKey: srcKey,
@@ -276,16 +283,18 @@
             };
         }
 
-        const dataURL = await fetchAsDataURL(src);
+        if (!broken) {
+            const dataURL = await fetchAsDataURL(src);
 
-        if (dataURL) {
-            return {
-                key: keyForDataURL(dataURL),
-                srcKey: srcKey,
-                image: dataURL,
-                image_url: "",
-                prompt: prompt
-            };
+            if (dataURL) {
+                return {
+                    key: keyForDataURL(dataURL),
+                    srcKey: srcKey,
+                    image: dataURL,
+                    image_url: "",
+                    prompt: prompt
+                };
+            }
         }
 
         // גיבוי: השרת ישלוף את התמונה מהכתובת הפומבית
@@ -677,8 +686,18 @@
             });
         };
 
+        const diagBtn = document.createElement("button");
+        diagBtn.innerText = "🔍 אבחון - מה התוסף רואה בעמוד";
+        Object.assign(diagBtn.style, {
+            background: "#DD6B20", color: "white", border: "none",
+            padding: "8px 14px", borderRadius: "12px", fontWeight: "bold",
+            cursor: "pointer", fontSize: "13px"
+        });
+        diagBtn.onclick = runDiagnostics;
+
         optionsDiv.appendChild(autoBtn);
         optionsDiv.appendChild(manualBtn);
+        optionsDiv.appendChild(diagBtn);
 
         // מדבקת סטטוס
         const statusDiv = document.createElement("div");
@@ -1023,6 +1042,112 @@
             updateAutoButton();
             optionsDiv.style.display = "flex";
         }
+    }
+
+    // ============================================================
+    // אבחון - מה הסריקה באמת רואה בעמוד
+    // ============================================================
+
+    function runDiagnostics() {
+
+        const imgs = deepQueryAll(document, "img");
+        const lines = [];
+        let candidates = 0;
+
+        imgs.forEach(function (img) {
+
+            const src = img.currentSrc || img.src || "";
+            if (!src) return;
+
+            const w = img.naturalWidth || 0;
+            const h = img.naturalHeight || 0;
+            const cw = img.clientWidth || 0;
+            const ch = img.clientHeight || 0;
+            const loaded = w > 0;
+            const broken = img.complete && w === 0;
+            const pass = isGeneratedImageCandidate(img);
+
+            if (pass) candidates++;
+
+            // מציגים רק תמונות גדולות או שנפסלו שהן דווקא גדולות במסך -
+            // אייקונים זעירים ממילא לא מעניינים
+            if (!pass && Math.max(w, cw) < 100 && Math.max(h, ch) < 100) return;
+
+            const srcType =
+                src.startsWith("blob:") ? "blob" :
+                src.startsWith("data:image") ? "data" :
+                /googleusercontent\.com/.test(src) ? "guser" :
+                /gstatic\.com/.test(src) ? "gstatic" : "אחר";
+
+            lines.push(
+                (pass ? "✅ תיתפס" : "❌ נפסלה") +
+                " | " + srcType +
+                " | גודל " + w + "x" + h +
+                (loaded ? "" : " (טעינה נכשלה" + (cw ? ", מוצג " + cw + "x" + ch : "") + ")") +
+                " | " + src.substring(0, 70)
+            );
+        });
+
+        const summary =
+            "סה\"כ תמונות בעמוד: " + imgs.length +
+            "\nמועמדות להעלאה: " + candidates;
+
+        showDiagModal(summary, lines);
+    }
+
+    function showDiagModal(summary, lines) {
+
+        closeCurrentOverlay();
+
+        const overlay = createOverlay();
+        const modal = createModal();
+        modal.style.maxWidth = "520px";
+        modal.style.textAlign = "right";
+
+        const title = document.createElement("h2");
+        title.innerText = "🔍 אבחון סריקת תמונות";
+        Object.assign(title.style, { margin: "0 0 10px 0", color: "#333" });
+
+        const sum = document.createElement("p");
+        sum.innerText = summary;
+        Object.assign(sum.style, { color: "#333", fontSize: "14px", fontWeight: "bold" });
+
+        const pre = document.createElement("pre");
+        pre.innerText = lines.length ? lines.join("\n") : "(אין תמונות גדולות בעמוד)";
+        Object.assign(pre.style, {
+            maxHeight: "260px", overflow: "auto", fontSize: "11px",
+            background: "#F7FAFC", padding: "10px", borderRadius: "8px",
+            whiteSpace: "pre-wrap", wordBreak: "break-all", direction: "ltr",
+            textAlign: "left"
+        });
+
+        const copyBtn = document.createElement("button");
+        copyBtn.innerText = "📋 העתק לשיתוף עם התמיכה";
+        Object.assign(copyBtn.style, buttonStyle("#3182CE"));
+        copyBtn.onclick = function () {
+            const text = summary + "\n" + lines.join("\n");
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text);
+                copyBtn.innerText = "✅ הועתק";
+            }
+        };
+
+        const closeBtn = document.createElement("button");
+        closeBtn.innerText = "סגור";
+        Object.assign(closeBtn.style, buttonStyle("#E2E8F0", "#333"));
+        closeBtn.onclick = closeCurrentOverlay;
+
+        const row = document.createElement("div");
+        Object.assign(row.style, { display: "flex", gap: "10px", marginTop: "12px" });
+        row.appendChild(copyBtn);
+        row.appendChild(closeBtn);
+
+        modal.appendChild(title);
+        modal.appendChild(sum);
+        modal.appendChild(pre);
+        modal.appendChild(row);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
     }
 
     // ============================================================
