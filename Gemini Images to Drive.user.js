@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -225,10 +225,49 @@
         return text.substring(0, 200);
     }
 
-    // מוריד את התמונה מהדפדפן ל-dataURL. אם ההורדה נכשלת מחזיר null
-    // ואז נשתמש בכתובת הפומבית כגיבוי (השרת ישלוף אותה).
-    function fetchAsDataURL(src) {
+    // חילוץ התמונה ל-dataURL בכמה שיטות, מהמהירה והאמינה ביותר:
+    // 1. Canvas - ציור התמונה וחילוץ הבייטים מהזיכרון. עובד מצוין
+    //    ל-blob: (התמונות של גמיני) בלי רשת בכלל, ועוקף חסימות CSP
+    //    שגמיני מטיל על fetch מהדף.
+    // 2. fetch רגיל - ל-https עם כשרון CORS או ל-data:.
+    // 3. GM_xmlhttpRequest - יוצא מהרחבת טמפרמונקי ועוקף גם CORS;
+    //    רלוונטי רק ל-https, כי blob: קיים רק בתוך הדף.
+    // מחזיר null אם כל השיטות נכשלו.
+    function imageToDataURL(img, src) {
         return new Promise(function (resolve) {
+
+            // שיטה 1: canvas מהזיכרון
+            try {
+                if (img.naturalWidth > 0) {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+
+                    // וידוא שהציור הצליח באמת - דוגמים פיקסלים ומוודאים
+                    // שלא הכל שקוף (כך נראה canvas ריק או מזוהם שהצליח
+                    // להתחמק מהחריגה)
+                    let opaque = false;
+                    const data = ctx.getImageData(
+                        0, 0, canvas.width, canvas.height
+                    ).data;
+                    for (let i = 3; i < data.length; i += 4 * 997) {
+                        if (data[i] > 0) { opaque = true; break; }
+                    }
+                    if (!opaque) throw new Error("canvas empty");
+
+                    const canvasURL = canvas.toDataURL("image/png");
+                    if (canvasURL && canvasURL.indexOf("data:image") === 0) {
+                        resolve(canvasURL);
+                        return;
+                    }
+                }
+            } catch (e) {
+                // canvas מזוהם או שגיאה - ממשיכים לשיטה הבאה
+            }
+
+            // שיטה 2: fetch רגיל
             try {
                 fetch(src)
                     .then(function (r) { return r.blob(); })
@@ -240,7 +279,30 @@
                         reader.onerror = function () { resolve(null); };
                         reader.readAsDataURL(blob);
                     })
-                    .catch(function () { resolve(null); });
+                    .catch(function () {
+
+                        // שיטה 3: GM_xmlhttpRequest - רק ל-https
+                        if (!src.startsWith("https://")) { resolve(null); return; }
+
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: src,
+                            responseType: "blob",
+                            timeout: 60000,
+                            onload: function (resp) {
+                                try {
+                                    const reader = new FileReader();
+                                    reader.onload = function () {
+                                        resolve(reader.result || null);
+                                    };
+                                    reader.onerror = function () { resolve(null); };
+                                    reader.readAsDataURL(resp.response);
+                                } catch (e) { resolve(null); }
+                            },
+                            onerror: function () { resolve(null); },
+                            ontimeout: function () { resolve(null); }
+                        });
+                    });
             } catch (e) {
                 resolve(null);
             }
@@ -284,7 +346,7 @@
         }
 
         if (!broken) {
-            const dataURL = await fetchAsDataURL(src);
+            const dataURL = await imageToDataURL(img, src);
 
             if (dataURL) {
                 return {
