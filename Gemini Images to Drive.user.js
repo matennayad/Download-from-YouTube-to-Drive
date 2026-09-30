@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -56,6 +56,13 @@
 
     // key -> { prompt, image (dataURL) או image_url, ts }
     const pending = new Map();
+
+    // כתובות מקור שכבר "נצרכו" לתמונה מסוימת - כדי ששתי תמונות לא
+    // יתאימו לאותה כתובת מקור
+    const consumedSourceURLs = new Set();
+
+    // כמה תמונות blob שויכו עד עתה לכתובת מקור - לשידוך לפי סדר
+    let consumedBlobCount = 0;
 
     const uploadingKeys = new Set();
     const uploadedKeys = new Set();
@@ -163,17 +170,28 @@
 
         if (!img || img.tagName !== "IMG") return false;
 
+        const src = img.currentSrc || img.src || "";
+        if (!src) return false;
+
         // גודל טבעי או גודל מוצג. תמונה שנכשלה בטעינה (למשל חסימת
         // נטפרי על שרת התמונות) מדווחת naturalWidth=0 אבל עדיין
-        // מוצגת בגודל מלא בעמוד - גם אותה רוצים לתפוס, כי השרת
-        // יכול לשלוף אותה לבד מהכתובת.
+        // מוצגת בעמוד - גם אותה רוצים לתפוס, כי השרת יכול לשלוף
+        // אותה לבד מהכתובת.
         const loaded = (img.naturalWidth || 0) > 0;
         const w = loaded ? img.naturalWidth : (img.clientWidth || 0);
         const h = loaded ? img.naturalHeight : (img.clientHeight || 0);
-        if (w < MIN_IMAGE_SIZE || h < MIN_IMAGE_SIZE) return false;
+        const broken = img.complete && (img.naturalWidth || 0) === 0;
 
-        const src = img.currentSrc || img.src || "";
-        if (!src) return false;
+        // תמונת תוצר שנכשלה בטעינה עם כתובת תוצר של גמיני (/gg/):
+        // הכתובת שווה זהב גם אם המקום שנשאר לה בעמוד מכווץ
+        // (בלי תמונה טעונה אין יחס-גובה, והעמוד מכווץ את הגובה).
+        const brokenGenerated =
+            broken && /googleusercontent\.com\/gg\//.test(src) &&
+            w >= MIN_IMAGE_SIZE;
+
+        if (w < MIN_IMAGE_SIZE || h < MIN_IMAGE_SIZE) {
+            if (!brokenGenerated) return false;
+        }
 
         const srcType =
             src.startsWith("blob:") ? "blob" :
@@ -319,7 +337,59 @@
         return "src:" + src;
     }
 
+    // ============================================================
+    // איתור כתובת המקור האמיתית של תמונת blob ביומן הרשת של הדף
+    // ============================================================
+    // תמונות גמיני מוצגות בדף דרך blob: - אבל מאחורי הקלעים יש
+    // כתובת googleusercontent אמיתית. היא נטענת פעם אחת ונשמרת
+    // ביומן הרשת (performance entries) של הדף. השרת שלנו - בלי
+    // סינון נטפרי - יכול לשלוף משם את התמונה המקורית במלוא איכותה,
+    // גם כשהתצוגה בדפדפן נכשלה בגלל הסינון.
+
+    function findSourceURLForBlob() {
+
+        let entries = [];
+        try {
+            entries = performance.getEntriesByType("resource");
+        } catch (e) {
+            return "";
+        }
+
+        // אוספים את כל כתובות googleusercontent שנטענו בדף וטרם
+        // שויכו לאף תמונה. תמונות מקור של גמיני הן בדרך כלל מהצורה
+        // lh3.googleusercontent.com/gg/... - מסננים אווטארים (/a/)
+        // ותמונות זעירות (=s64 וכדומה).
+        const candidates = [];
+
+        for (let i = 0; i < entries.length; i++) {
+            const name = entries[i].name || "";
+
+            if (!/googleusercontent\.com\//.test(name)) continue;
+            if (/googleusercontent\.com\/a\//.test(name)) continue;
+            if (/=s(\d{1,3})(\$|\?|$)/.test(name)) continue; // זעירות
+            if (consumedSourceURLs.has(name)) continue;
+
+            candidates.push(name);
+        }
+
+        if (!candidates.length) return "";
+
+        // שידוך לפי סדר: התמונה ה-k שנתפסה מקבלת את כתובת המקור
+        // ה-k שנטענה בעמוד. כך גם אחרי רענון עם היסטוריה ארוכה
+        // ההתאמה נשמרת (יומן הרשת ממוין לפי זמן טעינה).
+        const picked = candidates[consumedBlobCount] || "";
+
+        return picked;
+    }
+
+    function rememberConsumedSourceURL(url) {
+        consumedSourceURLs.add(url);
+        trimKeySet(consumedSourceURLs, MAX_UPLOADED_KEYS);
+    }
+
     // בונה רשומת העלאה מאלמנט תמונה. מחזיר Promise שמתפוגג לרשומה או null.
+    // עדיפות העלאה: כתובת מקור אמיתית של גוגל (השרת שולף בעצמו - איכות
+    // מלאה ובלי חסימת נטפרי) ורק אחר כך בייטים מהדפדפן (canvas).
     async function buildEntry(img) {
 
         const src = img.currentSrc || img.src || "";
@@ -327,13 +397,63 @@
 
         const prompt = findPromptFor(img);
 
-        // תמונה שנכשלה בטעינה בדפדפן - ניסיון fetch ייכשל גם כן.
-        // עוברים ישר לגיבוי: השרת שולף מהכתובת הפומבית.
+        // תמונה שנכשלה בטעינה בדפדפן (למשל נטפרי חוסם את שרת התמונות
+        // של גוגל) - הכתובת עצמה עדיין תקינה, והשרת ישלוף ממנה.
         const broken = img.complete && (img.naturalWidth || 0) === 0;
 
         // מפתח לפי המקור כבר עכשיו - כדי לא לתפוס את אותה תמונה
-        // שוב בזמן שההורדה ל-dataURL מתבצעת
+        // שוב בזמן שהחילוץ מתבצע
         const srcKey = keyForSrc(src);
+
+        const isGuser = /googleusercontent\.com/.test(src);
+
+        // כתובת גוגל אמיתית (גם אם התצוגה בדפדפן נכשלה) - השרת יוריד
+        // משם את התמונה המקורית במלוא איכותה
+        if (isGuser) {
+            return {
+                key: srcKey,
+                srcKey: srcKey,
+                image: "",
+                image_url: src,
+                prompt: prompt
+            };
+        }
+
+        // תמונת blob: מחפשים את כתובת המקור שממנה נוצרה ביומן הרשת
+        if (src.startsWith("blob:")) {
+
+            if (!broken) {
+                const realURL = findSourceURLForBlob();
+
+                if (realURL) {
+                    rememberConsumedSourceURL(realURL);
+                    consumedBlobCount++;
+                    return {
+                        key: srcKey,
+                        srcKey: srcKey,
+                        image: "",
+                        image_url: realURL,
+                        prompt: prompt
+                    };
+                }
+
+                // אין כתובת מקור - מחלצים את הבייטים מהתצוגה עצמה
+                const dataURL = await imageToDataURL(img, src);
+
+                if (dataURL) {
+                    return {
+                        key: keyForDataURL(dataURL),
+                        srcKey: srcKey,
+                        image: dataURL,
+                        image_url: "",
+                        prompt: prompt
+                    };
+                }
+            }
+
+            // blob שבור או שלא ניתן לחילוץ - אין מה לעשות איתו
+            return null;
+        }
 
         if (!broken && src.startsWith("data:image")) {
             return {
@@ -345,32 +465,7 @@
             };
         }
 
-        if (!broken) {
-            const dataURL = await imageToDataURL(img, src);
-
-            if (dataURL) {
-                return {
-                    key: keyForDataURL(dataURL),
-                    srcKey: srcKey,
-                    image: dataURL,
-                    image_url: "",
-                    prompt: prompt
-                };
-            }
-        }
-
-        // גיבוי: השרת ישלוף את התמונה מהכתובת הפומבית
-        const httpSrc = src.startsWith("https://") ? src : "";
-
-        if (!httpSrc) return null;
-
-        return {
-            key: srcKey,
-            srcKey: srcKey,
-            image: "",
-            image_url: httpSrc,
-            prompt: prompt
-        };
+        return null;
     }
 
     // ============================================================
@@ -1150,9 +1245,21 @@
             );
         });
 
+        // כתובות תוצר של גמיני ביומן הרשת - אלה שהשרת יכול לשלוף
+        let ggURLs = [];
+        try {
+            performance.getEntriesByType("resource").forEach(function (e) {
+                if (/googleusercontent\.com\/(gg|labs-ai)\//.test(e.name || "")) {
+                    ggURLs.push(e.name);
+                }
+            });
+        } catch (e) {}
+
         const summary =
             "סה\"כ תמונות בעמוד: " + imgs.length +
-            "\nמועמדות להעלאה: " + candidates;
+            "\nמועמדות להעלאה: " + candidates +
+            "\nכתובות תוצר ביומן הרשת: " + ggURLs.length +
+            (ggURLs.length ? "\n" + ggURLs.join("\n") : "");
 
         showDiagModal(summary, lines);
     }
