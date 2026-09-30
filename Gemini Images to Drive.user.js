@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -110,21 +110,63 @@
     }
 
     // ============================================================
+    // חדירה ל-Shadow DOM
+    // ============================================================
+    // חלקים מהממשק של גמיני בנויים מ-web components עם shadow roots,
+    // ו-querySelectorAll רגיל לא רואה אותם בכלל. הפונקציות כאן מחפשות
+    // לעומק, כולל בתוך שורשי צל.
+
+    function deepQueryAll(root, selector, out) {
+        out = out || [];
+        if (!root) return out;
+
+        try {
+            root.querySelectorAll(selector).forEach(function (el) {
+                out.push(el);
+            });
+        } catch (e) {}
+
+        const all = root.querySelectorAll("*");
+        for (const el of all) {
+            if (el.shadowRoot) deepQueryAll(el.shadowRoot, selector, out);
+        }
+
+        return out;
+    }
+
+    // closest שחוצה גבולות shadow root - כי closest רגיל עוצר בגבול
+    function composedClosest(el, selector) {
+        let node = el;
+        while (node) {
+            try {
+                if (node.matches && node.matches(selector)) return node;
+            } catch (e) {}
+            if (node.parentElement) {
+                node = node.parentElement;
+                continue;
+            }
+            const root = node.getRootNode ? node.getRootNode() : null;
+            node = root && root.host ? root.host : null;
+        }
+        return null;
+    }
+
+    // ============================================================
     // זיהוי תמונות שנוצרו על ידי גמיני
     // ============================================================
-    // ההיגיון: תמונה שגמיני יצר היא <img> גדול (מעל MIN_IMAGE_SIZE)
-    // שמוצגת בתוך בלוק התשובה של המודל (model-response), עם מקור
-    // blob:, data: או googleusercontent. תמונות שהמשתמש עצמו העלה
-    // מוצגות בתוך הודעת המשתמש (user-query) ולכן מסוננות החוצה.
-    // תמונות תוצר עשויות להיות עטופות בכפתור (פתיחה במסך מלא) -
-    // זה לא פוסל אותן. אייקונים ואווטארים מסוננים לפי גודל.
+    // ההיגיון: תמונה שגמיני יצר היא <img> גדולה (מעל MIN_IMAGE_SIZE)
+    // ממקור blob:, data: או googleusercontent, שמופיעה בעמוד השיחה
+    // ולא בתוך הודעת המשתמש. איורי פתיחה ולוגואים קטנים מסוננים
+    // לפי גודל, ותמונות שהמשתמש העלה מסוננות לפי user-query.
 
     function isGeneratedImageCandidate(img) {
 
         if (!img || img.tagName !== "IMG") return false;
 
-        const w = img.naturalWidth || 0;
-        const h = img.naturalHeight || 0;
+        // גודל טבעי או גודל מוצג (תמונה שטרם נטענה עד הסוף עשויה
+        // לדווח רק על הגודל המוצג)
+        const w = img.naturalWidth || img.clientWidth || 0;
+        const h = img.naturalHeight || img.clientHeight || 0;
         if (w < MIN_IMAGE_SIZE || h < MIN_IMAGE_SIZE) return false;
 
         const src = img.currentSrc || img.src || "";
@@ -138,16 +180,12 @@
         if (!srcType) return false;
 
         // תמונות שהמשתמש העלה בעצמו מוצגות בהודעת המשתמש - לא תוצרי גמיני
-        if (img.closest("user-query, [class*='user-query']")) return false;
+        if (composedClosest(img, "user-query, [class*='user-query']")) return false;
 
-        // תוצרי גמיני מוצגים בתוך בלוק התשובה של המודל
-        if (img.closest("model-response, [class*='model-response']")) {
-            return true;
-        }
-
-        // מחוץ לתשובת המודל נחשבים רק blob/data - כתובות googleusercontent
-        // מחוץ לתשובה הן בדרך כלל לוגואים ואיורי פתיחה, לא תוצרים
-        return srcType === "blob" || srcType === "data";
+        // תוצרי גמיני: כל תמונה גדולה מהמקורות הללו שאינה בהודעת המשתמש.
+        // בעבר חייבנו model-response סביב, אבל גמיני משנה את מבנה ה-DOM
+        // תדיר והסתמכות עליו גרמה לפספוס תמונות.
+        return true;
     }
 
     // ניסיון לשלוף את טקסט ההנחיה שהובילה לתמונה: הודעת המשתמש
@@ -155,12 +193,13 @@
     function findPromptFor(img) {
 
         const container =
-            img.closest("model-response") ||
-            img.closest('[class*="model-response"]') ||
-            img.closest('[class*="conversation-container"]') ||
+            composedClosest(img, "model-response") ||
+            composedClosest(img, "[class*='model-response']") ||
+            composedClosest(img, "[class*='conversation-container']") ||
             img;
 
-        const queries = document.querySelectorAll(
+        const queries = deepQueryAll(
+            document,
             "user-query, [class*='user-query']"
         );
 
@@ -176,7 +215,9 @@
 
         if (!best) return "";
 
-        const text = (best.innerText || "").trim().replace(/\s+/g, " ");
+        const text = (best.innerText || best.textContent || "")
+            .trim()
+            .replace(/\s+/g, " ");
 
         return text.substring(0, 200);
     }
@@ -267,7 +308,9 @@
 
     async function scanForImages() {
 
-        const imgs = document.querySelectorAll("img");
+        const imgs = deepQueryAll(document, "img");
+
+        let found = 0;
 
         for (const img of imgs) {
 
@@ -304,7 +347,10 @@
             }
 
             addPending(entry);
+            found++;
         }
+
+        return found;
     }
 
     function addPending(entry) {
@@ -623,7 +669,12 @@
                 checkAuthAndContinue(email, uploadAllPending);
                 return;
             }
-            scanForImages().then(uploadAllPending);
+            scanForImages().then(function (added) {
+                uploadAllPending();
+                if (!added && pending.size === 0) {
+                    showToast("🤷 לא נמצאו תמונות חדשות בעמוד - גלול למעלה וודא שהתמונה מוצגת");
+                }
+            });
         };
 
         optionsDiv.appendChild(autoBtn);
