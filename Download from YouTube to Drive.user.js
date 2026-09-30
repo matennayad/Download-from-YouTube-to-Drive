@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     4.1
+// @version     5.0
 // @description כפתור הורדה ישירה לדרייב - סרטון בודד או ערוץ שלם, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -12,12 +12,77 @@
 // @grant       GM_getValue
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwT34zd8XK8pmEnALIacYVLq0N6_3QDE9F_qCNFD4c5yhTgPi32Yj1FWA6FpiJSLqXH/exec";
 
-    // הצגת שגיאה שהגיעה מהשרת.
+    // כמה סרטונים יורדים לכל היותר בבקשת ערוץ אחת.
+    // חייב להתאים ל-MAX_VIDEOS_PER_CHANNEL_REQUEST בשרת (channels.gs).
+    // בגרסה 4.1 היה כאן 20 והשרת הריץ 30: התצוגה המקדימה הבטיחה 30
+    // ובפועל ירדו רק 20. מעכשיו שני הצדדים על 30.
+    const MAX_VIDEOS_PER_CHANNEL_REQUEST = 30;
+
+    // כל כמה זמן בודקים התקדמות של עבודת ערוץ
+    const JOB_POLL_INTERVAL_MS = 15000;
+
+    // timeout לבקשות "זולות" (אימות, תצוגה מקדימה, סטטוס עבודה).
+    // להורדת סרטון בודד אין timeout: ההורדה עצמה עלולה להמשיך לרוץ
+    // בשרת גם אחרי שהתשובה מתאחרת, וניתוק מוקדם מדי היה גורם
+    // למשתמש לבקש שוב ולבזבז מכסה.
+    const CHEAP_REQUEST_TIMEOUT_MS = 60000;
+
+    // הגבלת גודל הלוג המקומי לכל ערוץ. מעבר לכך - הישנים ביותר נזרקים,
+    // כדי שערוץ ענק לא ינפח את האחסון של הדפדפן.
+    const MAX_IDS_PER_CHANNEL_LOG = 3000;
+
+    // כמה זמן להמתין לפני שמחזירים את הכפתור אחרי יציאה ממסך מלא
+    const FULLSCREEN_RETURN_DELAY_MS = 350;
+
+    // ============================================================
+    // הסתרה במסך מלא
+    // ============================================================
+    // במסך מלא הכפתור הציף על הסרטון. עכשיו: מקשיבים ל-fullscreenchange,
+    // מסתירים מיד בכניסה ומחזירים עם השהיה קטנה ביציאה.
+
+    function getFullscreenElement() {
+        return document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement ||
+            null;
+    }
+
+    function handleFullscreenChange() {
+        const container = document.getElementById('drive-download-container');
+        if (!container) return;
+
+        if (getFullscreenElement()) {
+            container.style.display = 'none';
+        } else {
+            setTimeout(function () {
+                const current = document.getElementById('drive-download-container');
+                if (!current) return;
+                if (getFullscreenElement()) return; // חזרו למסך מלא בינתיים
+                current.style.display = 'flex';
+            }, FULLSCREEN_RETURN_DELAY_MS);
+        }
+    }
+
+    // בזמן שהכפתור מוסתר, ה-setInterval ממשיך לקרוא ל-createFloatingMenu
+    // ומחזיר אותו למסך. הפונקציה הזאת מחזירה את ההסתרה אחרי כל יצירה.
+    function ensureFullscreenVisibility() {
+        const container = document.getElementById('drive-download-container');
+        if (container && getFullscreenElement()) {
+            container.style.display = 'none';
+        }
+    }
+
+    // ============================================================
+    // תצוגת שגיאות
+    // ============================================================
+
+    // תצוגת שגיאה שהגיעה מהשרת.
     //
     // בעבר כל שגיאה שלא הופיעה ברשימה קצרה של מחרוזות מוכרות הוחלפה
     // בהודעה "יוטיוב חסם אותנו, נסו בעוד 20 דקות". זה הסתיר את הסיבה
@@ -27,7 +92,6 @@
     // הודעות מהשרת שלנו כתובות בעברית ומיועדות למשתמש, אז הן מוצגות
     // כמו שהן. שגיאה טכנית באנגלית (yt-dlp, חריגה בקוד) מקבלת הסבר
     // בעברית, והטקסט המקורי מופיע מתחתיו כדי שאפשר יהיה לדווח עליו.
-
     function showServerError(errText, fallbackTitle) {
 
         const text = (errText || '').toString().trim();
@@ -51,8 +115,7 @@
             'פירוט:\n' + text.substring(0, 300));
     }
 
-
-    // כשאין תשובה מהשרת בכלל - תקלת רשת או פריסה שלא עודכנה
+    // כשאין תשובה מהשרת בכלל - תקלת רשת, timeout או פריסה שלא עודכנה
     function showConnectionError() {
         showModal('❌', 'אין תשובה מהשרת',
             'לא הצלחנו לקבל תשובה מהשרת.\n\n' +
@@ -60,16 +123,18 @@
             'ושיש חיבור לאינטרנט.');
     }
 
+    // חלונית "תשובה לא תקינה מהשרת" - אותו טקסט בכל המסלולים
+    function showBadJsonError(response) {
+        showModal('❌', 'תשובה לא תקינה מהשרת',
+            'השרת החזיר משהו שאינו JSON.\n\n' +
+            'לרוב זה אומר שה-Web App לא פרוס בגרסה העדכנית.\n\n' +
+            'תחילת התשובה:\n' +
+            ((response && response.responseText) || '').substring(0, 200));
+    }
+
     let isRequestInFlight = false;
 
-    // כמה סרטונים יורדים לכל היותר בבקשה אחת (חייב להתאים לשרת)
-    const MAX_VIDEOS_PER_CHANNEL_REQUEST = 20;
-
-    // כל כמה זמן בודקים התקדמות של עבודת ערוץ
-    const JOB_POLL_INTERVAL_MS = 15000;
-
     let activePollTimer = null;
-
 
     // ============================================================
     // זיהוי עמוד ערוץ / פלייליסט
@@ -102,11 +167,9 @@
         return null;
     }
 
-
     function isChannelPage() {
         return !!getChannelUrlFromPage();
     }
-
 
     // ============================================================
     // הלוג המקומי: אילו סרטונים כבר ירדו מהערוץ הזה
@@ -125,7 +188,6 @@
         return 'chlog::' + clean + '::' + format;
     }
 
-
     function getChannelLog(channelUrl, format) {
 
         try {
@@ -140,7 +202,6 @@
         }
     }
 
-
     function addToChannelLog(channelUrl, format, ids) {
 
         if (!ids || !ids.length) return;
@@ -152,17 +213,66 @@
             if (id) merged[id] = true;
         });
 
+        // הגבלת גודל: אם נצברו יותר מדי מזהים - הישנים ביותר נזרקים
+        let keys = Object.keys(merged);
+
+        if (keys.length > MAX_IDS_PER_CHANNEL_LOG) {
+            keys = keys.slice(keys.length - MAX_IDS_PER_CHANNEL_LOG);
+        }
+
         GM_setValue(
             channelLogKey(channelUrl, format),
-            JSON.stringify(Object.keys(merged))
+            JSON.stringify(keys)
         );
     }
-
 
     // מאפשר למשתמש לאפס את הזיכרון ולהוריד את הערוץ מההתחלה
     function clearChannelLog(channelUrl, format) {
         GM_setValue(channelLogKey(channelUrl, format), '[]');
     }
+
+    // ולידציה בסיסית למייל - לא שולחים לשרת מה שברור שרע
+    function isValidEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((email || '').trim());
+    }
+
+    // ============================================================
+    // זיכרון אימות ממתין
+    // ============================================================
+    // כשהשרת שולח קוד אימות למייל, שומרים כאן את הכתובת. אם המשתמש
+    // רענן את העמוד (או עבר למייל וחזר דרך רענון) והחלונית נעלמה -
+    // היא נפתחת מחדש מיד בטעינה, בלי בקשה חוזרת שתשלח מייל נוסף
+    // ותפגע בקוד שכבר נשלח. הזיכרון פג תוקף אחרי רבע שעה.
+
+    const PENDING_VERIFICATION_KEY = "pendingVerification";
+
+    const PENDING_VERIFICATION_TTL_MS = 15 * 60 * 1000;
+
+    function setPendingVerification(email) {
+        GM_setValue(PENDING_VERIFICATION_KEY, JSON.stringify({
+            email: email || "",
+            ts: Date.now()
+        }));
+    }
+
+    function getPendingVerification() {
+        try {
+            const data = JSON.parse(GM_getValue(PENDING_VERIFICATION_KEY, ""));
+            if (data && data.email &&
+                (Date.now() - data.ts) < PENDING_VERIFICATION_TTL_MS) {
+                return data.email;
+            }
+        } catch (e) {}
+        return "";
+    }
+
+    function clearPendingVerification() {
+        GM_setValue(PENDING_VERIFICATION_KEY, "");
+    }
+
+    // ============================================================
+    // התפריט הצף
+    // ============================================================
 
     function createFloatingMenu() {
         if (document.getElementById('drive-download-container')) return;
@@ -174,6 +284,11 @@
             zIndex: '999999', display: 'flex', flexDirection: 'column',
             alignItems: 'center', gap: '10px'
         });
+
+        // אם נכנסנו למסך מלא לפני שהכפתור נוצר - הוא נולד מוסתר
+        if (getFullscreenElement()) {
+            container.style.display = 'none';
+        }
 
         const optionsDiv = document.createElement('div');
         optionsDiv.id = 'drive-download-options';
@@ -210,11 +325,20 @@
 
             if (!email) {
                 showInputModal("📧 הזנת מייל מורשה", "הכנס את כתובת המייל שלך לשימוש בתוסף:", (inputEmail) => {
-                    if (inputEmail && inputEmail.includes('@')) {
-                        email = inputEmail.trim().toLowerCase();
-                        GM_setValue("userEmail", email);
-                        GM_setValue("deviceToken", ""); // מייל חדש = מתחילים אימות מכשיר מאפס
-                        checkAuthAndShowOptions(email, optionsDiv);
+                    const cleaned = (inputEmail || '').trim().toLowerCase();
+
+                    if (cleaned) {
+                        GM_setValue("userEmail", cleaned);
+                        GM_setValue("deviceToken", ""); // מייל חדש = אימות מכשיר מאפס
+                        clearPendingVerification();
+                        checkAuthAndShowOptions(cleaned, optionsDiv);
+                    }
+                }, {
+                    validate: function (v) {
+                        const cleaned = (v || '').trim().toLowerCase();
+                        if (!cleaned) return 'נא להזין כתובת מייל.';
+                        if (!isValidEmail(cleaned)) return 'הכתובת אינה תקינה - ודאו @ וסיומת דומיין.';
+                        return null;
                     }
                 });
                 return;
@@ -226,6 +350,13 @@
                 return;
             }
 
+            // אימות מכשיר ממתין למייל הזה? פותחים את חלונית הקוד ישירות,
+            // בלי בקשה חוזרת שתשלח מייל נוסף ותפגע בקוד הקודם
+            if (getPendingVerification() === email) {
+                showVerificationCodeModal(email, optionsDiv);
+                return;
+            }
+
             checkAuthAndShowOptions(email, optionsDiv);
         };
         addHoverEffect(mainBtn);
@@ -233,132 +364,8 @@
         container.appendChild(optionsDiv);
         container.appendChild(mainBtn);
         document.body.appendChild(container);
-    }
 
-    // בודק מול השרת האם המכשיר הזה מאומת למייל הזה, לפני שמציגים וידאו/אודיו בכלל
-    function checkAuthAndShowOptions(email, optionsDiv) {
-        setLoadingState(true);
-        const deviceToken = GM_getValue("deviceToken", "");
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: WEB_APP_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({ action: "checkStatus", email: email, deviceToken: deviceToken }),
-            onload: function(response) {
-                setLoadingState(false);
-                try {
-                    const res = JSON.parse(response.responseText);
-
-                    if (res.deviceToken) {
-                        GM_setValue("deviceToken", res.deviceToken);
-                    }
-
-                    if (res.success && res.authenticated) {
-                        optionsDiv.style.display = 'flex';
-                        return;
-                    }
-
-                    if (res.needsVerification) {
-                        showInputModal("🔑 אימות מכשיר חדש", res.error || "שלחנו קוד אימות בן 6 ספרות למייל שלך. הכנס אותו כאן:", (codeInput) => {
-                            if (codeInput && codeInput.trim().length === 6) {
-                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
-                            }
-                        });
-                        return;
-                    }
-
-                    showServerError(res.error);
-
-                } catch (e) {
-                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    showModal('❌', 'תשובה לא תקינה מהשרת',
-                        'השרת החזיר משהו שאינו JSON.\n\n' +
-                        'לרוב זה אומר שה-Web App לא פרוס בגרסה העדכנית.\n\n' +
-                        'תחילת התשובה:\n' +
-                        (response.responseText || '').substring(0, 200));
-                }
-            },
-            onerror: function() {
-                setLoadingState(false);
-                showConnectionError();
-            }
-        });
-    }
-
-    // שולח קוד אימות שהוזן, ואם תקין - מקבל טוקן מכשיר ומציג את כפתורי הפורמט
-    function submitVerificationCode(email, code, optionsDiv) {
-        setLoadingState(true);
-        const deviceToken = GM_getValue("deviceToken", "");
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: WEB_APP_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({ action: "checkStatus", email: email, deviceToken: deviceToken, verificationCode: code }),
-            onload: function(response) {
-                setLoadingState(false);
-                try {
-                    const res = JSON.parse(response.responseText);
-
-                    if (res.deviceToken) {
-                        GM_setValue("deviceToken", res.deviceToken);
-                    }
-
-                    if (res.success && res.authenticated) {
-                        optionsDiv.style.display = 'flex';
-                        return;
-                    }
-
-                    if (res.needsVerification) {
-                        // קוד שגוי - שואלים שוב, הפעם עם ההודעה שמציינת שהקוד שגוי
-                        showInputModal("🔑 אימות מכשיר חדש", res.error || "קוד שגוי, נסה שוב:", (codeInput) => {
-                            if (codeInput && codeInput.trim().length === 6) {
-                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
-                            }
-                        });
-                        return;
-                    }
-
-                    showServerError(res.error);
-
-                } catch (e) {
-                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    showModal('❌', 'תשובה לא תקינה מהשרת',
-                        'השרת החזיר משהו שאינו JSON.\n\n' +
-                        'לרוב זה אומר שה-Web App לא פרוס בגרסה העדכנית.\n\n' +
-                        'תחילת התשובה:\n' +
-                        (response.responseText || '').substring(0, 200));
-                }
-            },
-            onerror: function() {
-                setLoadingState(false);
-                showConnectionError();
-            }
-        });
-    }
-
-    // מצב טעינה: נועל את הכפתורים חזותית ומונע לחיצות כפולות
-    function setLoadingState(isLoading) {
-        isRequestInFlight = isLoading;
-        const btn = document.getElementById('drive-download-btn');
-        if (!btn) return;
-
-        if (isLoading) {
-            btn.style.opacity = '0.5';
-            btn.style.filter = 'grayscale(60%)';
-            btn.style.animation = 'drive-download-pulse 1s infinite';
-            if (!document.getElementById('drive-download-pulse-style')) {
-                const style = document.createElement('style');
-                style.id = 'drive-download-pulse-style';
-                style.innerText = '@keyframes drive-download-pulse { 0% { transform: scale(1); } 50% { transform: scale(0.93); } 100% { transform: scale(1); } }';
-                document.head.appendChild(style);
-            }
-        } else {
-            btn.style.opacity = '1';
-            btn.style.filter = 'none';
-            btn.style.animation = 'none';
-        }
+        ensureFullscreenVisibility();
     }
 
     function getImgStyle(height) {
@@ -377,13 +384,22 @@
         imgElement.onmouseleave = () => imgElement.style.transform = 'scale(1)';
     }
 
+    // ============================================================
+    // חלוניות
+    // ============================================================
+
     let currentOverlay = null;
 
-    // חלונית הודעה, עם תמיכה אופציונלית בקישור לחיץ (לדרייב)
-    function showModal(emoji, headingText, descriptionText, linkUrl) {
+    function closeCurrentOverlay() {
         if (currentOverlay && currentOverlay.parentNode) {
             currentOverlay.parentNode.removeChild(currentOverlay);
         }
+        currentOverlay = null;
+    }
+
+    // חלונית הודעה, עם תמיכה אופציונלית בקישור לחיץ (לדרייב)
+    function showModal(emoji, headingText, descriptionText, linkUrl) {
+        closeCurrentOverlay();
 
         const overlay = document.createElement('div');
         currentOverlay = overlay;
@@ -403,15 +419,20 @@
 
         const icon = document.createElement('div');
         icon.innerText = emoji;
-        icon.style.fontSize = '40px'; icon.style.marginBottom = '10px';
+        icon.style.fontSize = '40px';
+        icon.style.marginBottom = '10px';
 
         const title = document.createElement('h2');
         title.innerText = headingText;
-        title.style.margin = '0 0 10px 0'; title.style.color = '#333';
+        title.style.margin = '0 0 10px 0';
+        title.style.color = '#333';
 
         const desc = document.createElement('p');
         desc.innerText = descriptionText;
-        desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
+        desc.style.color = '#666';
+        desc.style.lineHeight = '1.5';
+        desc.style.fontSize = '15px';
+        desc.style.whiteSpace = 'pre-line';
 
         modal.appendChild(icon);
         modal.appendChild(title);
@@ -466,10 +487,7 @@
             fontSize: '16px', marginTop: '10px'
         });
 
-        closeBtn.onclick = () => {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
-        };
+        closeBtn.onclick = closeCurrentOverlay;
 
         modal.appendChild(devBox);
         modal.appendChild(closeBtn);
@@ -477,10 +495,10 @@
         document.body.appendChild(overlay);
     }
 
-    function showInputModal(headingText, descriptionText, onSubmitCallback) {
-        if (currentOverlay && currentOverlay.parentNode) {
-            currentOverlay.parentNode.removeChild(currentOverlay);
-        }
+    // חלונית קלט. inputProps (אופציונלי) מאפשר לכוון את השדה:
+    // למשל maxlength לקוד אימות או inputmode מספרי.
+    function showInputModal(headingText, descriptionText, onSubmitCallback, inputProps) {
+        closeCurrentOverlay();
 
         const overlay = document.createElement('div');
         currentOverlay = overlay;
@@ -500,11 +518,15 @@
 
         const title = document.createElement('h2');
         title.innerText = headingText;
-        title.style.margin = '0 0 10px 0'; title.style.color = '#333';
+        title.style.margin = '0 0 10px 0';
+        title.style.color = '#333';
 
         const desc = document.createElement('p');
         desc.innerText = descriptionText;
-        desc.style.color = '#666'; desc.style.lineHeight = '1.5'; desc.style.fontSize = '15px';
+        desc.style.color = '#666';
+        desc.style.lineHeight = '1.5';
+        desc.style.fontSize = '15px';
+        desc.style.whiteSpace = 'pre-line';
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -512,6 +534,20 @@
             width: '90%', padding: '10px', margin: '15px 0', fontSize: '16px',
             borderRadius: '8px', border: '1px solid #ccc', textAlign: 'center', outline: 'none'
         });
+
+        // שדרוג: בדיקת תקינות בתוך החלונית - קלט שגוי מציג הודעה במקום,
+        // במקום לסגור את החלונית בשקט כאילו לא קרה כלום
+        const errorDiv = document.createElement('div');
+        Object.assign(errorDiv.style, {
+            color: '#C53030', fontSize: '14px', fontWeight: 'bold',
+            minHeight: '18px', marginBottom: '5px', display: 'none'
+        });
+
+        if (inputProps) {
+            if (inputProps.maxLength) input.maxLength = inputProps.maxLength;
+            if (inputProps.inputMode) input.inputMode = inputProps.inputMode;
+            if (inputProps.placeholder) input.placeholder = inputProps.placeholder;
+        }
 
         const btnContainer = document.createElement('div');
         Object.assign(btnContainer.style, { display: 'flex', gap: '10px', marginTop: '10px' });
@@ -532,14 +568,32 @@
 
         submitBtn.onclick = () => {
             const val = input.value;
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
+
+            if (inputProps && typeof inputProps.validate === 'function') {
+                const error = inputProps.validate(val);
+                if (error) {
+                    errorDiv.innerText = error;
+                    errorDiv.style.display = 'block';
+                    input.focus();
+                    return;
+                }
+            }
+
+            closeCurrentOverlay();
             if (onSubmitCallback) onSubmitCallback(val);
         };
 
-        cancelBtn.onclick = () => {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
+        cancelBtn.onclick = closeCurrentOverlay;
+
+        // שדרוג: Enter מגיש, Escape מבטל - בלי לגעת בעכבר
+        input.onkeydown = function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitBtn.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelBtn.click();
+            }
         };
 
         btnContainer.appendChild(submitBtn);
@@ -548,315 +602,14 @@
         modal.appendChild(title);
         modal.appendChild(desc);
         modal.appendChild(input);
+        modal.appendChild(errorDiv);
         modal.appendChild(btnContainer);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         input.focus();
     }
 
-    // ============================================================
-    // בחירת הזרימה: סרטון בודד או ערוץ שלם
-    // ============================================================
-
-    function startDownloadFlow(format, optionsDiv) {
-
-        if (isChannelPage()) {
-            startChannelFlow(format, optionsDiv);
-        } else {
-            triggerDownload(format, optionsDiv);
-        }
-    }
-
-
-    // ============================================================
-    // ערוץ: קודם בדיקה כמה סרטונים חדשים יש, ואז אישור המשתמש
-    // ============================================================
-
-    function startChannelFlow(format, optionsDiv) {
-
-        if (isRequestInFlight) return;
-
-        const channelUrl = getChannelUrlFromPage();
-
-        if (!channelUrl) {
-            showModal('❌', 'שגיאה', 'לא זוהתה כתובת ערוץ בעמוד הזה.');
-            return;
-        }
-
-        const email = GM_getValue("userEmail", "");
-        const deviceToken = GM_getValue("deviceToken", "");
-        const skipIds = getChannelLog(channelUrl, format);
-
-        optionsDiv.style.display = 'none';
-        setLoadingState(true);
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: WEB_APP_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({
-                action: "channel_preview",
-                url: channelUrl,
-                email: email,
-                format: format,
-                deviceToken: deviceToken,
-                skipIds: skipIds
-            }),
-            onload: function (response) {
-                setLoadingState(false);
-
-                let res;
-
-                try {
-                    res = JSON.parse(response.responseText);
-                } catch (e) {
-                    showModal('❌', 'שגיאה', 'תשובה לא תקינה מהשרת.');
-                    return;
-                }
-
-                if (res.needsVerification) {
-                    showInputModal(
-                        "🔑 אימות מכשיר",
-                        res.error || "הכנס את קוד האימות שקיבלת במייל:",
-                        function (codeInput) {
-                            if (codeInput && codeInput.trim().length === 6) {
-                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
-                            }
-                        }
-                    );
-                    return;
-                }
-
-                if (!res.success) {
-                    showModal('❌', 'שגיאה', res.error || 'לא הצלחנו לקרוא את הערוץ.');
-                    return;
-                }
-
-                if (!res.willDownload) {
-                    showConfirmModal(
-                        'ℹ️',
-                        'אין סרטונים חדשים',
-                        'כל ' + (res.alreadyDownloaded || 0) + ' הסרטונים שנסרקו ' +
-                        'בערוץ "' + (res.channel || '') + '" כבר ירדו עבורך.\n\n' +
-                        'לאפס את הזיכרון ולהוריד את הערוץ מההתחלה?',
-                        'אפס והורד שוב',
-                        function () {
-                            clearChannelLog(channelUrl, format);
-                            startChannelFlow(format, optionsDiv);
-                        }
-                    );
-                    return;
-                }
-
-                showConfirmModal(
-                    '📺',
-                    'הורדת ערוץ: ' + (res.channel || ''),
-                    'נמצאו ' + res.remaining + ' סרטונים שעדיין לא ירדו.\n' +
-                    'בבקשה הזו יירדו ' + res.willDownload + ' סרטונים ' +
-                    '(' + (format === 'video' ? 'וידאו' : 'אודיו') + ').\n' +
-                    (res.alreadyDownloaded
-                        ? 'המערכת תדלג על ' + res.alreadyDownloaded + ' שכבר ירדו.\n'
-                        : '') +
-                    '\nההורדה רצה ברקע ואפשר להמשיך לגלוש.',
-                    'התחל הורדה',
-                    function () {
-                        submitChannelJob(channelUrl, format, skipIds, email, deviceToken);
-                    }
-                );
-            },
-            onerror: function () {
-                setLoadingState(false);
-                showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
-            }
-        });
-    }
-
-
-    function submitChannelJob(channelUrl, format, skipIds, email, deviceToken) {
-
-        setLoadingState(true);
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: WEB_APP_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({
-                action: "channel_download",
-                url: channelUrl,
-                email: email,
-                format: format,
-                deviceToken: deviceToken,
-                skipIds: skipIds
-            }),
-            onload: function (response) {
-                setLoadingState(false);
-
-                let res;
-
-                try {
-                    res = JSON.parse(response.responseText);
-                } catch (e) {
-                    showModal('❌', 'שגיאה', 'תשובה לא תקינה מהשרת.');
-                    return;
-                }
-
-                if (res.error === "limit_reached") {
-                    showModal('⚠️', 'הסתיימה המכסה היומית',
-                        'המערכת הגיעה למכסה היומית.\nניתן לנסות שוב לאחר חצות.');
-                    return;
-                }
-
-                if (!res.success || !res.jobId) {
-                    showModal('❌', 'שגיאה', res.error || 'לא הצלחנו לפתוח את העבודה.');
-                    return;
-                }
-
-                // שומרים את העבודה הפעילה כדי להמשיך לעקוב גם אחרי רענון
-                GM_setValue("activeJob", JSON.stringify({
-                    jobId: res.jobId,
-                    channelUrl: channelUrl,
-                    format: format,
-                    channel: res.channel || ''
-                }));
-
-                showProgressModal(
-                    'העבודה התחילה',
-                    'ערוץ: ' + (res.channel || '') + '\n' +
-                    '0 מתוך ' + res.total + ' סרטונים'
-                );
-
-                pollJob(res.jobId, channelUrl, format);
-            },
-            onerror: function () {
-                setLoadingState(false);
-                showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
-            }
-        });
-    }
-
-
-    // ============================================================
-    // מעקב אחרי התקדמות העבודה
-    // ============================================================
-
-    function pollJob(jobId, channelUrl, format) {
-
-        if (activePollTimer) {
-            clearTimeout(activePollTimer);
-            activePollTimer = null;
-        }
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: WEB_APP_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({
-                action: "job_status",
-                jobId: jobId,
-                email: GM_getValue("userEmail", "")
-            }),
-            onload: function (response) {
-
-                let res;
-
-                try {
-                    res = JSON.parse(response.responseText);
-                } catch (e) {
-                    scheduleNextPoll(jobId, channelUrl, format);
-                    return;
-                }
-
-                if (!res.success) {
-                    showModal('❌', 'שגיאה', res.error || 'העבודה לא נמצאה.');
-                    GM_setValue("activeJob", "");
-                    return;
-                }
-
-                // שומרים בלוג המקומי כל מה שכבר ירד, גם באמצע העבודה
-                addToChannelLog(channelUrl, format, res.downloadedIds || []);
-
-                if (res.status === 'done' ||
-                    res.status === 'error' ||
-                    res.status === 'cancelled') {
-
-                    GM_setValue("activeJob", "");
-
-                    const title = res.status === 'error'
-                        ? 'העבודה נעצרה'
-                        : (res.status === 'cancelled'
-                            ? 'ההורדה בוטלה'
-                            : 'הורדת הערוץ הסתיימה');
-
-                    showModal(
-                        res.status === 'done' ? '✅' : '⚠️',
-                        title,
-                        '✅ ירדו: ' + res.done + '\n' +
-                        '❌ נכשלו: ' + res.failed + '\n' +
-                        '⛔ נחסמו: ' + res.blocked + '\n' +
-                        (res.remainingAfter
-                            ? '\nנשארו עוד ' + res.remainingAfter +
-                              ' סרטונים בערוץ - אפשר ללחוץ שוב.\n'
-                            : '') +
-                        (res.error ? '\n' + res.error : '') +
-                        '\nפירוט מלא נמצא בקובץ log.txt בתוך התיקייה.',
-                        res.folderLink
-                    );
-
-                    return;
-                }
-
-                showProgressModal(
-                    'מוריד את הערוץ...',
-                    (res.channel ? 'ערוץ: ' + res.channel + '\n' : '') +
-                    res.processed + ' מתוך ' + res.total + ' סרטונים (' +
-                    res.percent + '%)\n' +
-                    '✅ ' + res.done + '  ❌ ' + res.failed + '  ⛔ ' + res.blocked +
-                    (res.status === 'queued' ? '\n(ממתין בתור בשרת)' : ''),
-                    res.percent
-                );
-
-                scheduleNextPoll(jobId, channelUrl, format);
-            },
-            onerror: function () {
-                scheduleNextPoll(jobId, channelUrl, format);
-            }
-        });
-    }
-
-
-    function scheduleNextPoll(jobId, channelUrl, format) {
-
-        activePollTimer = setTimeout(function () {
-            pollJob(jobId, channelUrl, format);
-        }, JOB_POLL_INTERVAL_MS);
-    }
-
-
-    // אם יש עבודה פעילה מהפעם הקודמת - ממשיכים לעקוב אחריה
-    function resumeActiveJob() {
-
-        const raw = GM_getValue("activeJob", "");
-
-        if (!raw) return;
-
-        try {
-
-            const job = JSON.parse(raw);
-
-            if (job && job.jobId) {
-                pollJob(job.jobId, job.channelUrl, job.format);
-            }
-
-        } catch (e) {
-            GM_setValue("activeJob", "");
-        }
-    }
-
-
-    // ============================================================
     // חלונית התקדמות (מתעדכנת במקום להיפתח מחדש)
-    // ============================================================
-
     function showProgressModal(headingText, descriptionText, percent) {
 
         const existingHeading = document.getElementById('drive-progress-heading');
@@ -874,9 +627,7 @@
             return;
         }
 
-        if (currentOverlay && currentOverlay.parentNode) {
-            currentOverlay.parentNode.removeChild(currentOverlay);
-        }
+        closeCurrentOverlay();
 
         const overlay = document.createElement('div');
         currentOverlay = overlay;
@@ -930,10 +681,7 @@
             padding: '8px 16px', border: 'none', borderRadius: '8px',
             backgroundColor: '#eee', cursor: 'pointer', fontSize: '14px'
         });
-        hideBtn.onclick = function () {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
-        };
+        hideBtn.onclick = closeCurrentOverlay;
 
         modal.appendChild(emojiEl);
         modal.appendChild(heading);
@@ -944,16 +692,10 @@
         document.body.appendChild(overlay);
     }
 
-
-    // ============================================================
     // חלונית אישור (כן / ביטול)
-    // ============================================================
-
     function showConfirmModal(emoji, headingText, descriptionText, confirmLabel, onConfirm) {
 
-        if (currentOverlay && currentOverlay.parentNode) {
-            currentOverlay.parentNode.removeChild(currentOverlay);
-        }
+        closeCurrentOverlay();
 
         const overlay = document.createElement('div');
         currentOverlay = overlay;
@@ -996,8 +738,7 @@
             backgroundColor: '#4caf50', color: '#fff', cursor: 'pointer', fontSize: '15px'
         });
         okBtn.onclick = function () {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
+            closeCurrentOverlay();
             if (onConfirm) onConfirm();
         };
 
@@ -1007,10 +748,7 @@
             padding: '10px 20px', border: 'none', borderRadius: '8px',
             backgroundColor: '#eee', cursor: 'pointer', fontSize: '15px'
         });
-        cancelBtn.onclick = function () {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            currentOverlay = null;
-        };
+        cancelBtn.onclick = closeCurrentOverlay;
 
         btnContainer.appendChild(okBtn);
         btnContainer.appendChild(cancelBtn);
@@ -1023,44 +761,541 @@
         document.body.appendChild(overlay);
     }
 
+    // ============================================================
+    // שכבת התקשורת מול השרת
+    // ============================================================
+    // requestJson שולח POST, מפענח JSON, ומפנה ל-handlers:
+    //   onload(res, response) - תשובה תקינה שפוענחה
+    //   onerror(err)          - שגיאת רשת / timeout
+    //   onBadJson(response)   - השרת החזיר משהו שאינו JSON
+    // options.timeoutMs - קובע timeout. בלי זה - בלי timeout
+    // (הורדת סרטון בודד לא מקבלת timeout, ראו הסבר למעלה).
 
-    // מבצע את ההורדה בפועל (נקרא רק אחרי שכבר עברנו אימות בהצלחה)
-    function triggerDownload(format, optionsDiv) {
-        if (isRequestInFlight) return;
+    function requestJson(payload, handlers, options) {
 
-        const email = GM_getValue("userEmail", "");
-        const deviceToken = GM_getValue("deviceToken", "");
-        const currentUrl = window.location.href;
-
-        optionsDiv.style.display = 'none';
-        setLoadingState(true);
+        const opts = options || {};
 
         GM_xmlhttpRequest({
             method: "POST",
             url: WEB_APP_URL,
             headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({ url: currentUrl, email: email, format: format, deviceToken: deviceToken }),
-            onload: function(response) {
-                setLoadingState(false);
+            data: JSON.stringify(payload),
+            timeout: opts.timeoutMs,
+            onload: function (response) {
+                let res = null;
                 try {
-                    const res = JSON.parse(response.responseText);
+                    res = JSON.parse(response.responseText);
+                } catch (e) {
+                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
+                    if (handlers.onBadJson) handlers.onBadJson(response);
+                    return;
+                }
+                if (handlers.onload) handlers.onload(res, response);
+            },
+            onerror: function (err) {
+                console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
+                if (handlers.onerror) handlers.onerror(err);
+            },
+            ontimeout: function () {
+                console.error("timeout בבקשה לשרת");
+                if (handlers.onerror) handlers.onerror({ type: "timeout" });
+            }
+        });
+    }
+
+    // ============================================================
+    // אימות מכשיר
+    // ============================================================
+
+    // בודק מול השרת האם המכשיר הזה מאומת למייל הזה, לפני שמציגים וידאו/אודיו בכלל
+    function checkAuthAndShowOptions(email, optionsDiv) {
+        setLoadingState(true);
+
+        requestJson(
+            {
+                action: "checkStatus",
+                email: email,
+                deviceToken: GM_getValue("deviceToken", "")
+            },
+            {
+                onload: function (res) {
+                    setLoadingState(false);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.success && res.authenticated) {
+                        clearPendingVerification();
+                        optionsDiv.style.display = 'flex';
+                        return;
+                    }
+
+                    if (res.needsVerification) {
+                        // השרת שלח קוד למייל - שומרים את המצב כדי שאחרי רענון
+                        // החלונית תיפתח שוב בלי לשלוח קוד חדש
+                        setPendingVerification(email);
+                        showVerificationCodeModal(email, optionsDiv);
+                        return;
+                    }
+
+                    showServerError(res.error);
+                },
+                onerror: function () {
+                    setLoadingState(false);
+                    showConnectionError();
+                },
+                onBadJson: function (response) {
+                    setLoadingState(false);
+                    showBadJsonError(response);
+                }
+            },
+            { timeoutMs: CHEAP_REQUEST_TIMEOUT_MS }
+        );
+    }
+
+    // חלונית הזנת קוד האימות - מקום אחד לכל המסלולים (אימות ראשוני,
+    // קוד שגוי, ערוץ, והמשך אחרי רענון עמוד)
+    function showVerificationCodeModal(email, optionsDiv, errorText) {
+        showInputModal(
+            "🔑 אימות מכשיר חדש",
+            errorText || "שלחנו קוד אימות בן 6 ספרות למייל שלך. הכנס אותו כאן:",
+            function (codeInput) {
+                const code = (codeInput || '').trim();
+                if (/^\d{6}$/.test(code)) {
+                    submitVerificationCode(email, code,
+                        optionsDiv || document.getElementById('drive-download-options'));
+                }
+            },
+            {
+                maxLength: 6,
+                inputMode: 'numeric',
+                placeholder: '------',
+                validate: function (v) {
+                    return /^\d{6}$/.test((v || '').trim())
+                        ? null
+                        : 'נא להזין בדיוק 6 ספרות.';
+                }
+            }
+        );
+    }
+
+    // שולח קוד אימות שהוזן, ואם תקין - מקבל טוקן מכשיר ומציג את כפתורי הפורמט
+    function submitVerificationCode(email, code, optionsDiv) {
+        setLoadingState(true);
+
+        requestJson(
+            {
+                action: "checkStatus",
+                email: email,
+                deviceToken: GM_getValue("deviceToken", ""),
+                verificationCode: code
+            },
+            {
+                onload: function (res) {
+                    setLoadingState(false);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.success && res.authenticated) {
+                        clearPendingVerification();
+                        if (optionsDiv) optionsDiv.style.display = 'flex';
+                        return;
+                    }
+
+                    if (res.needsVerification) {
+                        // קוד שגוי - שואלים שוב, הפעם עם הודעה שמציינת שהקוד שגוי
+                        showVerificationCodeModal(email, optionsDiv,
+                            res.error || "קוד שגוי, נסה שוב:");
+                        return;
+                    }
+
+                    showServerError(res.error);
+                },
+                onerror: function () {
+                    setLoadingState(false);
+                    showConnectionError();
+                },
+                onBadJson: function (response) {
+                    setLoadingState(false);
+                    showBadJsonError(response);
+                }
+            },
+            { timeoutMs: CHEAP_REQUEST_TIMEOUT_MS }
+        );
+    }
+
+    // מצב טעינה: נועל את הכפתורים חזותית ומונע לחיצות כפולות
+    function setLoadingState(isLoading) {
+        isRequestInFlight = isLoading;
+        const btn = document.getElementById('drive-download-btn');
+        if (!btn) return;
+
+        if (isLoading) {
+            btn.style.opacity = '0.5';
+            btn.style.filter = 'grayscale(60%)';
+            btn.style.animation = 'drive-download-pulse 1s infinite';
+            if (!document.getElementById('drive-download-pulse-style')) {
+                const style = document.createElement('style');
+                style.id = 'drive-download-pulse-style';
+                style.innerText = '@keyframes drive-download-pulse { 0% { transform: scale(1); } 50% { transform: scale(0.93); } 100% { transform: scale(1); } }';
+                document.head.appendChild(style);
+            }
+        } else {
+            btn.style.opacity = '1';
+            btn.style.filter = 'none';
+            btn.style.animation = 'none';
+        }
+    }
+
+    // ============================================================
+    // בחירת הזרימה: סרטון בודד או ערוץ שלם
+    // ============================================================
+
+    function startDownloadFlow(format, optionsDiv) {
+
+        if (isChannelPage()) {
+            startChannelFlow(format, optionsDiv);
+        } else {
+            triggerDownload(format, optionsDiv);
+        }
+    }
+
+    // ============================================================
+    // ערוץ: קודם בדיקה כמה סרטונים חדשים יש, ואז אישור המשתמש
+    // ============================================================
+
+    function startChannelFlow(format, optionsDiv) {
+
+        if (isRequestInFlight) return;
+
+        const channelUrl = getChannelUrlFromPage();
+
+        if (!channelUrl) {
+            showModal('❌', 'שגיאה', 'לא זוהתה כתובת ערוץ בעמוד הזה.');
+            return;
+        }
+
+        const email = GM_getValue("userEmail", "");
+        const skipIds = getChannelLog(channelUrl, format);
+
+        optionsDiv.style.display = 'none';
+        setLoadingState(true);
+
+        requestJson(
+            {
+                action: "channel_preview",
+                url: channelUrl,
+                email: email,
+                format: format,
+                deviceToken: GM_getValue("deviceToken", ""),
+                skipIds: skipIds
+            },
+            {
+                onload: function (res) {
+                    setLoadingState(false);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.needsVerification) {
+                        setPendingVerification(email);
+                        showVerificationCodeModal(email, optionsDiv);
+                        return;
+                    }
+
+                    if (!res.success) {
+                        showModal('❌', 'שגיאה', res.error || 'לא הצלחנו לקרוא את הערוץ.');
+                        return;
+                    }
+
+                    if (!res.willDownload) {
+                        showConfirmModal(
+                            'ℹ️',
+                            'אין סרטונים חדשים',
+                            'כל ' + (res.alreadyDownloaded || 0) + ' הסרטונים שנסרקו ' +
+                            'בערוץ "' + (res.channel || '') + '" כבר ירדו עבורך.\n\n' +
+                            'לאפס את הזיכרון ולהוריד את הערוץ מההתחלה?',
+                            'אפס והורד שוב',
+                            function () {
+                                clearChannelLog(channelUrl, format);
+                                startChannelFlow(format, optionsDiv);
+                            }
+                        );
+                        return;
+                    }
+
+                    showConfirmModal(
+                        '📺',
+                        'הורדת ערוץ: ' + (res.channel || ''),
+                        'נמצאו ' + res.remaining + ' סרטונים שעדיין לא ירדו.\n' +
+                        'בבקשה הזו יירדו ' + res.willDownload + ' סרטונים ' +
+                        '(' + (format === 'video' ? 'וידאו' : 'אודיו') + ').\n' +
+                        (res.alreadyDownloaded
+                            ? 'המערכת תדלג על ' + res.alreadyDownloaded + ' שכבר ירדו.\n'
+                            : '') +
+                        '\nההורדה רצה ברקע ואפשר להמשיך לגלוש.',
+                        'התחל הורדה',
+                        function () {
+                            submitChannelJob(channelUrl, format, skipIds, email);
+                        }
+                    );
+                },
+                onerror: function () {
+                    setLoadingState(false);
+                    showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
+                },
+                onBadJson: function (response) {
+                    setLoadingState(false);
+                    showBadJsonError(response);
+                }
+            },
+            { timeoutMs: CHEAP_REQUEST_TIMEOUT_MS }
+        );
+    }
+
+    function submitChannelJob(channelUrl, format, skipIds, email) {
+
+        setLoadingState(true);
+
+        requestJson(
+            {
+                action: "channel_download",
+                url: channelUrl,
+                email: email,
+                format: format,
+                // הטוקן נקרא כאן, בזמן השליחה, ולא בתחילת הזרימה:
+                // אם התצוגה המקדימה הנפיקה טוקן חדש - נשתמש בו.
+                deviceToken: GM_getValue("deviceToken", ""),
+                skipIds: skipIds
+            },
+            {
+                onload: function (res) {
+                    setLoadingState(false);
+
+                    if (res.deviceToken) {
+                        GM_setValue("deviceToken", res.deviceToken);
+                    }
+
+                    if (res.error === "limit_reached") {
+                        showModal('⚠️', 'הסתיימה המכסה היומית',
+                            'המערכת הגיעה למכסה היומית של 200 קבצים.\nניתן לנסות שוב לאחר חצות.');
+                        return;
+                    }
+
+                    // מצב תחרות: בין התצוגה המקדימה לאישור ירדו כל הסרטונים
+                    // (למשל ממכשיר אחר) והשרת מדווח שאין מה להוריד.
+                    if (res.nothingNew) {
+                        showConfirmModal(
+                            'ℹ️',
+                            'אין סרטונים חדשים',
+                            (res.message || 'כל הסרטונים בערוץ הזה כבר ירדו עבורך בעבר.') + '\n\n' +
+                            'לאפס את הזיכרון ולהוריד את הערוץ מההתחלה?',
+                            'אפס והורד שוב',
+                            function () {
+                                clearChannelLog(channelUrl, format);
+                                startChannelFlow(format, document.getElementById('drive-download-options'));
+                            }
+                        );
+                        return;
+                    }
+
+                    if (!res.success || !res.jobId) {
+                        showModal('❌', 'שגיאה', res.error || 'לא הצלחנו לפתוח את העבודה.');
+                        return;
+                    }
+
+                    // שומרים את העבודה הפעילה כדי להמשיך לעקוב גם אחרי רענון
+                    GM_setValue("activeJob", JSON.stringify({
+                        jobId: res.jobId,
+                        channelUrl: channelUrl,
+                        format: format,
+                        channel: res.channel || ''
+                    }));
+
+                    showProgressModal(
+                        'העבודה התחילה',
+                        'ערוץ: ' + (res.channel || '') + '\n' +
+                        '0 מתוך ' + res.total + ' סרטונים',
+                        0
+                    );
+
+                    pollJob(res.jobId, channelUrl, format);
+                },
+                onerror: function () {
+                    setLoadingState(false);
+                    showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
+                },
+                onBadJson: function (response) {
+                    setLoadingState(false);
+                    showBadJsonError(response);
+                }
+            },
+            { timeoutMs: CHEAP_REQUEST_TIMEOUT_MS }
+        );
+    }
+
+    // ============================================================
+    // מעקב אחרי התקדמות העבודה
+    // ============================================================
+
+    function pollJob(jobId, channelUrl, format) {
+
+        if (activePollTimer) {
+            clearTimeout(activePollTimer);
+            activePollTimer = null;
+        }
+
+        requestJson(
+            {
+                action: "job_status",
+                jobId: jobId,
+                email: GM_getValue("userEmail", "")
+            },
+            {
+                onload: function (res) {
+
+                    // תשובה לא תקינה חד-פעמית - ממשיכים לדגום, זו לא סוף העבודה
+                    if (!res || !res.success) {
+                        if (res && res.error && /לא נמצאה/.test(res.error)) {
+                            GM_setValue("activeJob", "");
+                            showModal('❌', 'שגיאה', res.error || 'העבודה לא נמצאה.');
+                            return;
+                        }
+                        scheduleNextPoll(jobId, channelUrl, format);
+                        return;
+                    }
+
+                    // שומרים בלוג המקומי כל מה שכבר ירד, גם באמצע העבודה -
+                    // כך גם סגירת הדפדפן באמצע לא תגרום להורדה כפולה
+                    addToChannelLog(channelUrl, format, res.downloadedIds || []);
+
+                    if (res.status === 'done' ||
+                        res.status === 'error' ||
+                        res.status === 'cancelled') {
+
+                        GM_setValue("activeJob", "");
+
+                        const title = res.status === 'error'
+                            ? 'העבודה נעצרה'
+                            : (res.status === 'cancelled'
+                                ? 'ההורדה בוטלה'
+                                : 'הורדת הערוץ הסתיימה');
+
+                        showModal(
+                            res.status === 'done' ? '✅' : '⚠️',
+                            title,
+                            '✅ ירדו: ' + res.done + '\n' +
+                            '❌ נכשלו: ' + res.failed + '\n' +
+                            '⛔ נחסמו: ' + res.blocked + '\n' +
+                            (res.remainingAfter
+                                ? '\nנשארו עוד ' + res.remainingAfter +
+                                  ' סרטונים בערוץ - אפשר ללחוץ שוב.\n'
+                                : '') +
+                            (res.error ? '\n' + res.error : '') +
+                            '\nפירוט מלא נמצא בקובץ log.txt בתוך התיקייה.',
+                            res.folderLink
+                        );
+
+                        return;
+                    }
+
+                    showProgressModal(
+                        'מוריד את הערוץ...',
+                        (res.channel ? 'ערוץ: ' + res.channel + '\n' : '') +
+                        res.processed + ' מתוך ' + res.total + ' סרטונים (' +
+                        res.percent + '%)\n' +
+                        '✅ ' + res.done + '  ❌ ' + res.failed + '  ⛔ ' + res.blocked +
+                        (res.status === 'queued' ? '\n(ממתין בתור בשרת)' : ''),
+                        res.percent
+                    );
+
+                    scheduleNextPoll(jobId, channelUrl, format);
+                },
+                onerror: function () {
+                    // תקלת רשת או timeout חד-פעמיים - ממשיכים לדגום בשקט
+                    scheduleNextPoll(jobId, channelUrl, format);
+                },
+                onBadJson: function () {
+                    scheduleNextPoll(jobId, channelUrl, format);
+                }
+            },
+            { timeoutMs: CHEAP_REQUEST_TIMEOUT_MS }
+        );
+    }
+
+    function scheduleNextPoll(jobId, channelUrl, format) {
+
+        activePollTimer = setTimeout(function () {
+            pollJob(jobId, channelUrl, format);
+        }, JOB_POLL_INTERVAL_MS);
+    }
+
+    // אם יש עבודה פעילה מהפעם הקודמת - ממשיכים לעקוב אחריה
+    function resumeActiveJob() {
+
+        const raw = GM_getValue("activeJob", "");
+
+        if (!raw) return;
+
+        try {
+
+            const job = JSON.parse(raw);
+
+            if (job && job.jobId) {
+                pollJob(job.jobId, job.channelUrl, job.format);
+            }
+
+        } catch (e) {
+            GM_setValue("activeJob", "");
+        }
+    }
+
+    // ============================================================
+    // הורדת סרטון בודד
+    // ============================================================
+
+    // מבצע את ההורדה בפועל (נקרא רק אחרי שכבר עברנו אימות בהצלחה).
+    // בכוונה אין כאן timeout: ההורדה עצמה עלולה להמשיך לרוץ בשרת
+    // גם אחרי שהתשובה מתאחרת.
+    function triggerDownload(format, optionsDiv) {
+        if (isRequestInFlight) return;
+
+        const email = GM_getValue("userEmail", "");
+        const currentUrl = window.location.href;
+
+        optionsDiv.style.display = 'none';
+        setLoadingState(true);
+
+        requestJson(
+            {
+                url: currentUrl,
+                email: email,
+                format: format,
+                deviceToken: GM_getValue("deviceToken", "")
+            },
+            {
+                onload: function (res) {
+                    setLoadingState(false);
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
                     }
 
                     if (res.error === "limit_reached" || (res.error && res.error.includes("המכסה היומית"))) {
-                        showModal('⚠️', 'הסתיימה המכסה היומית', 'המערכת הגיעה למכסה היומית של 100 קבצים.\nניתן לנסות שוב לאחר חצות.');
+                        showModal('⚠️', 'הסתיימה המכסה היומית',
+                            'המערכת הגיעה למכסה היומית של 200 קבצים.\nניתן לנסות שוב לאחר חצות.');
                         return;
                     }
 
                     if (res.needsVerification) {
-                        // הטוקן שהיה לנו כנראה כבר לא תקף (למשל נמחק ידנית) - חוזרים לתהליך אימות מהתחלה
-                        showInputModal("🔑 אימות מכשיר חדש", res.error || "שלחנו קוד אימות בן 6 ספרות למייל שלך. הכנס אותו כאן:", (codeInput) => {
-                            if (codeInput && codeInput.trim().length === 6) {
-                                submitVerificationCode(email, codeInput.trim(), optionsDiv);
-                            }
-                        });
+                        // הטוקן שהיה לנו כנראה כבר לא תקף (למשל נמחק ידנית) -
+                        // חוזרים לתהליך אימות מהתחלה
+                        setPendingVerification(email);
+                        showVerificationCodeModal(email, optionsDiv);
                         return;
                     }
 
@@ -1071,29 +1306,61 @@
 
                     // הצלחה - חלונית עם קישור לחיץ לדרייב
                     showModal('✅', 'ההורדה הושלמה בהצלחה!', 'הסרטון ירד ועלה לדרייב בהצלחה.', res.driveLink);
-
-                } catch (e) {
-                    console.error("שגיאה בפענוח JSON:", e, response.responseText);
-                    showModal('❌', 'תשובה לא תקינה מהשרת',
-                        'השרת החזיר משהו שאינו JSON.\n\n' +
-                        'זה קורה בדרך כלל כשה-Web App לא פרוס בגרסה ' +
-                        'העדכנית, או כשגוגל מחזירה דף שגיאה.\n\n' +
-                        'תחילת התשובה:\n' +
-                        (response.responseText || '').substring(0, 200));
+                },
+                onerror: function (err) {
+                    setLoadingState(false);
+                    console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
+                    showConnectionError();
+                },
+                onBadJson: function (response) {
+                    setLoadingState(false);
+                    showBadJsonError(response);
                 }
-            },
-            onerror: function(err) {
-                setLoadingState(false);
-                console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
-                showConnectionError();
             }
+            // בלי timeout - ההורדה עצמה עלולה להמשיך בשרת אחרי התשובה
+        );
+    }
+
+    // ============================================================
+    // אתחול
+    // ============================================================
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange']
+        .forEach(function (evt) {
+            document.addEventListener(evt, handleFullscreenChange);
         });
+
+    // אחרי רענון העמוד בזמן המתנה לקוד אימות - פותח מחדש את חלונית הקוד.
+    // בכוונה נקרא פעם אחת בטעינה ולא ב-setInterval, כדי שביטול ידני של
+    // החלונית לא יפתח אותה שוב ושוב.
+    function resumePendingVerification() {
+
+        const pending = getPendingVerification();
+
+        if (!pending) return;
+
+        if (pending !== GM_getValue("userEmail", "")) {
+            clearPendingVerification();
+            return;
+        }
+
+        showVerificationCodeModal(
+            pending,
+            document.getElementById('drive-download-options'),
+            "הקוד שנשלח למייל שלך עדיין ממתין. הכנס אותו כאן:"
+        );
     }
 
     window.addEventListener('load', function () {
         createFloatingMenu();
+        resumePendingVerification();
         resumeActiveJob();
     });
 
-    setInterval(createFloatingMenu, 3000);
+    // יוטיוב הוא SPA: ניווט פנימי עלול להסיר את הכפתור.
+    // הבדיקה התקופתית מחזירה אותו, ומוודאת שהוא נשאר מוסתר במסך מלא.
+    setInterval(function () {
+        createFloatingMenu();
+        ensureFullscreenVisibility();
+    }, 3000);
 })();
