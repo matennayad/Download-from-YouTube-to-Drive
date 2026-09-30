@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     5.0
+// @version     5.1
 // @description כפתור הורדה ישירה לדרייב - סרטון בודד או ערוץ שלם, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -100,6 +100,25 @@
             showModal('❌', fallbackTitle || 'שגיאה',
                 'השרת לא החזיר סיבה.\n\n' +
                 'כדאי לבדוק בגיליון "לוג שגיאות ובקשות" מה נרשם שם.');
+            return;
+        }
+
+        // מיפוי שגיאות מוכרות להודעות ברורות, במקום להציף את המשתמש
+        // בלוג ה-yt-dlp המלא:
+
+        // 1) יוטיוב דורש התחברות/עוגיות = חסימה זמנית של ה-IP של השרת
+        if (/sign in to confirm|use --cookies|cookies\.txt|YOUTUBE_COOKIES|you're not a bot/i.test(text)) {
+            showModal('⏳', 'יוטיוב חסם זמנית את כתובת ה-IP של השרת',
+                'ההורדה נתקלה בחסימה זמנית מצד יוטיוב.\n' +
+                'אנא נסו שוב בעוד 20 דקות.');
+            return;
+        }
+
+        // 2) טוקן החיבור לדרייב פג תוקף
+        if (/invalid_grant|token has been expired|expired or revoked|refresh token|failed to refresh/i.test(text)) {
+            showModal('🔌', 'פג תוקף חיבור השרת לדרייב',
+                'אנא עדכנו את מנהל המערכת לעדכון הטוקן.\n\n' +
+                'מייל מנהל המערכת: menaka05567@gmail.com');
             return;
         }
 
@@ -299,12 +318,14 @@
         });
 
         const videoBtn = document.createElement('img');
+        videoBtn.id = 'drive-btn-video';
         videoBtn.src = 'https://i.postimg.cc/gc19BRzZ/Gemini-Generated-Image-wcg6lawcg6lawcg6.jpg';
         Object.assign(videoBtn.style, getImgStyle('70px'));
         videoBtn.onclick = () => startDownloadFlow('video', optionsDiv);
         addHoverEffect(videoBtn);
 
         const audioBtn = document.createElement('img');
+        audioBtn.id = 'drive-btn-audio';
         audioBtn.src = 'https://i.postimg.cc/kMLrh8J6/Gemini-Generated-Image-1a7koh1a7koh1a7k.jpg';
         Object.assign(audioBtn.style, getImgStyle('70px'));
         audioBtn.onclick = () => startDownloadFlow('audio', optionsDiv);
@@ -361,7 +382,19 @@
         };
         addHoverEffect(mainBtn);
 
+        // מדבקת סטטוס שמוצגת בזמן שהורדה מתבצעת
+        const statusDiv = document.createElement('div');
+        statusDiv.id = 'drive-status-label';
+        Object.assign(statusDiv.style, {
+            display: 'none', backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            padding: '6px 12px', borderRadius: '12px', fontSize: '13px',
+            fontWeight: 'bold', color: '#B7791F',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)', whiteSpace: 'nowrap'
+        });
+        statusDiv.innerText = '⏳ ההורדה מתבצעת - נא להמתין';
+
         container.appendChild(optionsDiv);
+        container.appendChild(statusDiv);
         container.appendChild(mainBtn);
         document.body.appendChild(container);
 
@@ -819,7 +852,7 @@
             },
             {
                 onload: function (res) {
-                    setLoadingState(false);
+                    endWorkingState();
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
@@ -842,11 +875,11 @@
                     showServerError(res.error);
                 },
                 onerror: function () {
-                    setLoadingState(false);
+                    endWorkingState();
                     showConnectionError();
                 },
                 onBadJson: function (response) {
-                    setLoadingState(false);
+                    endWorkingState();
                     showBadJsonError(response);
                 }
             },
@@ -893,7 +926,7 @@
             },
             {
                 onload: function (res) {
-                    setLoadingState(false);
+                    endWorkingState();
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
@@ -915,11 +948,11 @@
                     showServerError(res.error);
                 },
                 onerror: function () {
-                    setLoadingState(false);
+                    endWorkingState();
                     showConnectionError();
                 },
                 onBadJson: function (response) {
-                    setLoadingState(false);
+                    endWorkingState();
                     showBadJsonError(response);
                 }
             },
@@ -948,6 +981,70 @@
             btn.style.filter = 'none';
             btn.style.animation = 'none';
         }
+    }
+
+    // ============================================================
+    // מצב עבודה נראה לעין: הכפתור שנלחץ מהבהב, השני ננעל, ומוצגת
+    // מדבקת סטטוס - כדי שברור שההורדה מתבצעת ושאי אפשר ללחוץ שוב.
+    // ============================================================
+
+    let workingStateActive = false;
+
+    function ensureWorkingStyle() {
+        if (document.getElementById('drive-working-style')) return;
+        const style = document.createElement('style');
+        style.id = 'drive-working-style';
+        style.innerText =
+            '@keyframes drive-working-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.97); } }';
+        document.head.appendChild(style);
+    }
+
+    function beginWorkingState(format) {
+        workingStateActive = true;
+        setLoadingState(true);
+        ensureWorkingStyle();
+
+        const videoBtn = document.getElementById('drive-btn-video');
+        const audioBtn = document.getElementById('drive-btn-audio');
+        const clicked = format === 'video' ? videoBtn : audioBtn;
+        const other = format === 'video' ? audioBtn : videoBtn;
+
+        // הכפתור שנלחץ מהבהב - אבל נעול ללחיצה
+        if (clicked) {
+            clicked.style.animation = 'drive-working-blink 1.1s infinite';
+            clicked.style.pointerEvents = 'none';
+        }
+
+        // הכפתור השני כבוי ונעול
+        if (other) {
+            other.style.opacity = '0.3';
+            other.style.pointerEvents = 'none';
+        }
+
+        const label = document.getElementById('drive-status-label');
+        if (label) label.style.display = 'block';
+    }
+
+    function endWorkingState() {
+        if (!workingStateActive) {
+            // לא היינו במצב עבודה (למשל בזרימת אימות) - רק משחררים את הנעילה
+            setLoadingState(false);
+            return;
+        }
+
+        workingStateActive = false;
+        setLoadingState(false);
+
+        ['drive-btn-video', 'drive-btn-audio'].forEach(function (id) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.style.animation = 'none';
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+        });
+
+        const label = document.getElementById('drive-status-label');
+        if (label) label.style.display = 'none';
     }
 
     // ============================================================
@@ -981,8 +1078,7 @@
         const email = GM_getValue("userEmail", "");
         const skipIds = getChannelLog(channelUrl, format);
 
-        optionsDiv.style.display = 'none';
-        setLoadingState(true);
+        beginWorkingState(format);
 
         requestJson(
             {
@@ -995,7 +1091,7 @@
             },
             {
                 onload: function (res) {
-                    setLoadingState(false);
+                    endWorkingState();
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
@@ -1045,11 +1141,11 @@
                     );
                 },
                 onerror: function () {
-                    setLoadingState(false);
+                    endWorkingState();
                     showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
                 },
                 onBadJson: function (response) {
-                    setLoadingState(false);
+                    endWorkingState();
                     showBadJsonError(response);
                 }
             },
@@ -1059,7 +1155,7 @@
 
     function submitChannelJob(channelUrl, format, skipIds, email) {
 
-        setLoadingState(true);
+        beginWorkingState(format);
 
         requestJson(
             {
@@ -1074,7 +1170,7 @@
             },
             {
                 onload: function (res) {
-                    setLoadingState(false);
+                    endWorkingState();
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
@@ -1126,11 +1222,11 @@
                     pollJob(res.jobId, channelUrl, format);
                 },
                 onerror: function () {
-                    setLoadingState(false);
+                    endWorkingState();
                     showModal('❌', 'שגיאה', 'לא הצלחנו להתחבר לשרת.');
                 },
                 onBadJson: function (response) {
-                    setLoadingState(false);
+                    endWorkingState();
                     showBadJsonError(response);
                 }
             },
@@ -1267,8 +1363,7 @@
         const email = GM_getValue("userEmail", "");
         const currentUrl = window.location.href;
 
-        optionsDiv.style.display = 'none';
-        setLoadingState(true);
+        beginWorkingState(format);
 
         requestJson(
             {
@@ -1279,7 +1374,7 @@
             },
             {
                 onload: function (res) {
-                    setLoadingState(false);
+                    endWorkingState();
 
                     if (res.deviceToken) {
                         GM_setValue("deviceToken", res.deviceToken);
@@ -1308,12 +1403,12 @@
                     showModal('✅', 'ההורדה הושלמה בהצלחה!', 'הסרטון ירד ועלה לדרייב בהצלחה.', res.driveLink);
                 },
                 onerror: function (err) {
-                    setLoadingState(false);
+                    endWorkingState();
                     console.error("שגיאת תקשורת מוחלטת בבקשה לשרת:", err);
                     showConnectionError();
                 },
                 onBadJson: function (response) {
-                    setLoadingState(false);
+                    endWorkingState();
                     showBadJsonError(response);
                 }
             }
