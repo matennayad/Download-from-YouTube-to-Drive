@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -349,6 +349,99 @@
         });
     }
 
+    // זיהוי מוזאיקת השגיאה של גמיני לפי תוכן הפיקסלים:
+    // כשגמיני לא מצליח להציג תמונה הוא מציג רשת אריחים 5x4 בצבעים
+    // אחידים (חום/ירוק-זית) עם אייקון מטוס נייר במרכז. לפעמים זה הדבר
+    // היחיד בעמוד - בלי שום כתובת מקור לשליפה - ואז רק בדיקת פיקסלים
+    // מונעת ממנה להגיע לדרייב. תמונה אמיתית שגמיני יוצר לעולם איננה
+    // 12-20 מלבנים בצבע מלא.
+    // בודקים רק את האריחים החיצוניים - במרכז יושבים האייקון והטקסט.
+    function looksLikePlaceholderMosaic(dataURL) {
+        return new Promise(function (resolve) {
+            try {
+                const im = new Image();
+                im.onload = function () {
+                    try {
+                        const W = 50, H = 40;
+                        const c = document.createElement("canvas");
+                        c.width = W; c.height = H;
+                        const ctx = c.getContext("2d");
+                        ctx.drawImage(im, 0, 0, W, H);
+                        const d = ctx.getImageData(0, 0, W, H).data;
+
+                        const cols = 5, rows = 4;
+                        let solidTiles = 0, lowSatTiles = 0, totalTiles = 0;
+                        const tileColors = {};
+
+                        for (let r = 0; r < rows; r++) {
+                            for (let col = 0; col < cols; col++) {
+
+                                // דילוג על האריחים המרכזיים - שם האייקון והטקסט
+                                if (r >= 1 && r <= 2 && col >= 1 && col <= 3) continue;
+
+                                totalTiles++;
+
+                                // דגימה במרכז האריח, רחוק מהגבולות
+                                const x0 = Math.floor((col + 0.35) * W / cols);
+                                const x1 = Math.floor((col + 0.65) * W / cols);
+                                const y0 = Math.floor((r + 0.35) * H / rows);
+                                const y1 = Math.floor((r + 0.65) * H / rows);
+
+                                let minR = 255, maxR = 0, minG = 255, maxG = 0,
+                                    minB = 255, maxB = 0, sumR = 0, sumG = 0,
+                                    sumB = 0, n = 0;
+
+                                for (let y = y0; y <= y1; y++) {
+                                    for (let x = x0; x <= x1; x++) {
+                                        const i = (y * W + x) * 4;
+                                        const R = d[i], G = d[i + 1], B = d[i + 2];
+                                        if (R < minR) minR = R; if (R > maxR) maxR = R;
+                                        if (G < minG) minG = G; if (G > maxG) maxG = G;
+                                        if (B < minB) minB = B; if (B > maxB) maxB = B;
+                                        sumR += R; sumG += G; sumB += B; n++;
+                                    }
+                                }
+
+                                if (!n) continue;
+
+                                // אריח "מלא": טווח צבע זעיר בתוכו
+                                const range = Math.max(
+                                    maxR - minR, maxG - minG, maxB - minB
+                                );
+                                if (range <= 8) {
+                                    solidTiles++;
+                                    const aR = Math.round(sumR / n);
+                                    const aG = Math.round(sumG / n);
+                                    const aB = Math.round(sumB / n);
+
+                                    // פלטת הפלייסהולדר עמומה (חום/זית/שמנת).
+                                    // אמנות שטוחה אמיתית משתמשת בצבעים רוויים
+                                    const sat = Math.max(aR, aG, aB) -
+                                        Math.min(aR, aG, aB);
+                                    if (sat <= 90) lowSatTiles++;
+
+                                    tileColors[aR + "," + aG + "," + aB] = true;
+                                }
+                            }
+                        }
+
+                        // מוזאיקה: כמעט כל האריחים החופשיים אחידים, יש
+                        // מגוון צבעים ביניהם (לא רקע אחיד אחד), והפלטה
+                        // כולה עמומה כמו של פלייסהולדר גמיני
+                        resolve(
+                            totalTiles >= 8 &&
+                            solidTiles >= Math.ceil(totalTiles * 0.9) &&
+                            lowSatTiles >= solidTiles - 1 &&
+                            Object.keys(tileColors).length >= 3
+                        );
+                    } catch (e) { resolve(false); }
+                };
+                im.onerror = function () { resolve(false); };
+                im.src = dataURL;
+            } catch (e) { resolve(false); }
+        });
+    }
+
     // מפתח ייחודי לתמונה כדי למנוע העלאות כפולות
     function keyForDataURL(dataURL) {
         // דגימה מתחילת התוכן + אורך: זיהוי זהה לתמונה זהה בתוך הסשן
@@ -398,6 +491,18 @@
         deepQueryAll(container, "a[href]").forEach(function (a) {
             push(a.getAttribute("href") || "");
         });
+
+        // חיפוש גם ב-HTML הגולמי - לפעמים כתובת המקור שמורה בתכונה
+        // או במבנה נתונים שאינו תג img/a
+        try {
+            const html = (container.outerHTML || container.innerHTML || "")
+                .replace(/&amp;/g, "&");
+            const re = /https?:\/\/[^\s"'<>\\]+/g;
+            let m;
+            while ((m = re.exec(html))) {
+                if (m[0].length <= 300) push(m[0]);
+            }
+        } catch (e) {}
 
         return urls;
     }
@@ -510,6 +615,34 @@
                 const dataURL = await imageToDataURL(img, src);
 
                 if (dataURL) {
+
+                    // סינון אחרון: מוזאיקת השגיאה של גמיני, גם כשאין בעמוד
+                    // שום סימן אחר (לא תמונת מקור שבורה ולא כתובת gg)
+                    if (await looksLikePlaceholderMosaic(dataURL)) {
+
+                        // ניסיון התאוששות: כתובת מקור שנמצאה בתוך התשובה
+                        // (גם בתכונות נסתרות) - השרת ישלוף ממנה את התמונה
+                        const urls = findGeneratedURLsIn(container);
+                        for (const u of urls) {
+                            if (urlAlreadyQueued(u)) continue;
+                            rememberConsumedSourceURL(u);
+                            showToast("🛜 התמונה נחסמה לתצוגה - נשלפה ישירות מגוגל לדרייב");
+                            return {
+                                key: keyForSrc(u),
+                                srcKey: srcKey,
+                                image: "",
+                                image_url: u,
+                                prompt: prompt
+                            };
+                        }
+
+                        failNotice("mosaic:" + srcKey,
+                            "🚩 גמיני לא הצליח להציג את התמונה ולא נמצאה כתובת לשליפה - לא נשלח דבר לדרייב. נסה לבקש שוב");
+                        lastBuildFailReason =
+                            "🚩 מוזאיקת שגיאה זוהתה לפי פיקסלים - לא הועלתה";
+                        return null;
+                    }
+
                     return {
                         key: keyForDataURL(dataURL),
                         srcKey: srcKey,
@@ -543,6 +676,13 @@
 
         // 4) תמונת data: שנטענה בהצלחה
         if (!broken && src.startsWith("data:image")) {
+            if (await looksLikePlaceholderMosaic(src)) {
+                failNotice("mosaic:" + srcKey,
+                    "🚩 גמיני לא הצליח להציג את התמונה (הופיעה מוזאיקת שגיאה) - לא נשלח דבר לדרייב");
+                lastBuildFailReason =
+                    "🚩 מוזאיקת שגיאה זוהתה לפי פיקסלים - לא הועלתה";
+                return null;
+            }
             return {
                 key: keyForDataURL(src),
                 srcKey: srcKey,
