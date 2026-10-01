@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -350,90 +350,112 @@
     }
 
     // זיהוי מוזאיקת השגיאה של גמיני לפי תוכן הפיקסלים:
-    // כשגמיני לא מצליח להציג תמונה הוא מציג רשת אריחים 5x4 בצבעים
-    // אחידים (חום/ירוק-זית) עם אייקון מטוס נייר במרכז. לפעמים זה הדבר
-    // היחיד בעמוד - בלי שום כתובת מקור לשליפה - ואז רק בדיקת פיקסלים
-    // מונעת ממנה להגיע לדרייב. תמונה אמיתית שגמיני יוצר לעולם איננה
-    // 12-20 מלבנים בצבע מלא.
-    // בודקים רק את האריחים החיצוניים - במרכז יושבים האייקון והטקסט.
+    // כשגמיני לא מצליח להציג תמונה הוא מציג רשת אריחים בצבעים אחידים
+    // בפלטה עמומה (חום/זית/שמנת), לפעמים עם אייקון במרכז. קיימות כמה
+    // גרסאות (5x4, 3x3, בלי אייקון ועם) - לכן הבדיקה כללית: חיפוש גריד
+    // שבו כמעט כל התאים אחידים לגמרי. תמונה אמיתית שגמיני יוצר איננה
+    // סדרה של מלבנים בצבע מלא.
     function looksLikePlaceholderMosaic(dataURL) {
         return new Promise(function (resolve) {
             try {
                 const im = new Image();
                 im.onload = function () {
                     try {
-                        const W = 50, H = 40;
+                        const W = 100, H = 75;
                         const c = document.createElement("canvas");
                         c.width = W; c.height = H;
                         const ctx = c.getContext("2d");
                         ctx.drawImage(im, 0, 0, W, H);
                         const d = ctx.getImageData(0, 0, W, H).data;
 
-                        const cols = 5, rows = 4;
-                        let solidTiles = 0, lowSatTiles = 0, totalTiles = 0;
-                        const tileColors = {};
+                        // דגימת תא אחד בגריד - מחזירה טווח הצבעים בתוכו
+                        // ואת הצבע הממוצע. תא בתוך אריח אחיד = טווח זעיר
+                        function sampleCell(col, r, cols, rows) {
+                            const x0 = Math.floor((col + 0.35) * W / cols);
+                            const x1 = Math.floor((col + 0.65) * W / cols);
+                            const y0 = Math.floor((r + 0.35) * H / rows);
+                            const y1 = Math.floor((r + 0.65) * H / rows);
 
-                        for (let r = 0; r < rows; r++) {
-                            for (let col = 0; col < cols; col++) {
+                            let minR = 255, maxR = 0, minG = 255, maxG = 0,
+                                minB = 255, maxB = 0, sumR = 0, sumG = 0,
+                                sumB = 0, n = 0;
 
-                                // דילוג על האריחים המרכזיים - שם האייקון והטקסט
-                                if (r >= 1 && r <= 2 && col >= 1 && col <= 3) continue;
+                            for (let y = y0; y <= y1; y++) {
+                                for (let x = x0; x <= x1; x++) {
+                                    const i = (y * W + x) * 4;
+                                    const R = d[i], G = d[i + 1], B = d[i + 2];
+                                    if (R < minR) minR = R; if (R > maxR) maxR = R;
+                                    if (G < minG) minG = G; if (G > maxG) maxG = G;
+                                    if (B < minB) minB = B; if (B > maxB) maxB = B;
+                                    sumR += R; sumG += G; sumB += B; n++;
+                                }
+                            }
 
-                                totalTiles++;
+                            if (!n) return null;
+                            return {
+                                range: Math.max(
+                                    maxR - minR, maxG - minG, maxB - minB
+                                ),
+                                avgR: Math.round(sumR / n),
+                                avgG: Math.round(sumG / n),
+                                avgB: Math.round(sumB / n)
+                            };
+                        }
 
-                                // דגימה במרכז האריח, רחוק מהגבולות
-                                const x0 = Math.floor((col + 0.35) * W / cols);
-                                const x1 = Math.floor((col + 0.65) * W / cols);
-                                const y0 = Math.floor((r + 0.35) * H / rows);
-                                const y1 = Math.floor((r + 0.65) * H / rows);
+                        // בדיקה בכמה גרידים - כדי לתפוס כל גרסה של המוזאיקה
+                        const grids = [
+                            { cols: 3, rows: 3, skipCenter: false },
+                            { cols: 4, rows: 3, skipCenter: false },
+                            { cols: 4, rows: 4, skipCenter: false },
+                            { cols: 5, rows: 4, skipCenter: true }
+                        ];
 
-                                let minR = 255, maxR = 0, minG = 255, maxG = 0,
-                                    minB = 255, maxB = 0, sumR = 0, sumG = 0,
-                                    sumB = 0, n = 0;
+                        for (const g of grids) {
+                            let solid = 0, total = 0, lowSat = 0;
+                            const colors = {};
 
-                                for (let y = y0; y <= y1; y++) {
-                                    for (let x = x0; x <= x1; x++) {
-                                        const i = (y * W + x) * 4;
-                                        const R = d[i], G = d[i + 1], B = d[i + 2];
-                                        if (R < minR) minR = R; if (R > maxR) maxR = R;
-                                        if (G < minG) minG = G; if (G > maxG) maxG = G;
-                                        if (B < minB) minB = B; if (B > maxB) maxB = B;
-                                        sumR += R; sumG += G; sumB += B; n++;
+                            for (let r = 0; r < g.rows; r++) {
+                                for (let col = 0; col < g.cols; col++) {
+
+                                    // בגריד 5x4 האייקון והטקסט יושבים במרכז
+                                    if (g.skipCenter && r >= 1 && r <= 2 &&
+                                        col >= 1 && col <= 3) continue;
+
+                                    total++;
+
+                                    const s = sampleCell(col, r, g.cols, g.rows);
+                                    if (!s) continue;
+
+                                    if (s.range <= 10) {
+                                        solid++;
+
+                                        const q = (s.avgR >> 4) + "," +
+                                            (s.avgG >> 4) + "," +
+                                            (s.avgB >> 4);
+                                        colors[q] = true;
+
+                                        // פלטת הפלייסהולדר עמומה (חום/זית/שמנת).
+                                        // אמנות שטוחה אמיתית משתמשת בצבעים רוויים
+                                        const sat =
+                                            Math.max(s.avgR, s.avgG, s.avgB) -
+                                            Math.min(s.avgR, s.avgG, s.avgB);
+                                        if (sat <= 90) lowSat++;
                                     }
                                 }
+                            }
 
-                                if (!n) continue;
-
-                                // אריח "מלא": טווח צבע זעיר בתוכו
-                                const range = Math.max(
-                                    maxR - minR, maxG - minG, maxB - minB
-                                );
-                                if (range <= 8) {
-                                    solidTiles++;
-                                    const aR = Math.round(sumR / n);
-                                    const aG = Math.round(sumG / n);
-                                    const aB = Math.round(sumB / n);
-
-                                    // פלטת הפלייסהולדר עמומה (חום/זית/שמנת).
-                                    // אמנות שטוחה אמיתית משתמשת בצבעים רוויים
-                                    const sat = Math.max(aR, aG, aB) -
-                                        Math.min(aR, aG, aB);
-                                    if (sat <= 90) lowSatTiles++;
-
-                                    tileColors[aR + "," + aG + "," + aB] = true;
-                                }
+                            // מוזאיקה: כמעט כל התאים אחידים, יש מגוון צבעים
+                            // ביניהם (לא רקע אחיד אחד), והפלטה עמומה
+                            if (total >= 8 &&
+                                solid >= Math.ceil(total * 0.85) &&
+                                Object.keys(colors).length >= 3 &&
+                                lowSat >= Math.ceil(solid * 0.8)) {
+                                resolve(true);
+                                return;
                             }
                         }
 
-                        // מוזאיקה: כמעט כל האריחים החופשיים אחידים, יש
-                        // מגוון צבעים ביניהם (לא רקע אחיד אחד), והפלטה
-                        // כולה עמומה כמו של פלייסהולדר גמיני
-                        resolve(
-                            totalTiles >= 8 &&
-                            solidTiles >= Math.ceil(totalTiles * 0.9) &&
-                            lowSatTiles >= solidTiles - 1 &&
-                            Object.keys(tileColors).length >= 3
-                        );
+                        resolve(false);
                     } catch (e) { resolve(false); }
                 };
                 im.onerror = function () { resolve(false); };
