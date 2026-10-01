@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -10,8 +10,10 @@
 // @run-at      document-idle
 // @noframes
 // @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
+// @grant        GM_setValue// @grant GM_getValue
+// @connect script.google.com
+// @connect *.googleusercontent.com
+// @connect lh3.google.com
 // ==/UserScript==
 
 (function () {
@@ -19,6 +21,10 @@
 
     // אותו Web App שמשמש את תוסף היוטיוב - אותו אימות מכשיר, אותו לוג
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwT34zd8XK8pmEnALIacYVLq0N6_3QDE9F_qCNFD4c5yhTgPi32Yj1FWA6FpiJSLqXH/exec";
+
+    // גרסת התוסף - להצגה באבחון
+    const SCRIPT_VERSION = (typeof GM_info !== "undefined" && GM_info &&
+        GM_info.script && GM_info.script.version) || "1.9";
 
     // כמה פעמים בשנייה סורקים את העמוד לתמונות חדשות
     const SCAN_INTERVAL_MS = 2500;
@@ -565,6 +571,61 @@
             pending.has(key);
     }
 
+    // קיצור כתובת לתצוגה - כתובות תוצר של גוגל ענקיות ושוברות פריסה
+    function shortUrl(u, max) {
+        u = String(u || "");
+        const n = max || 90;
+        return u.length <= n ? u : u.substring(0, n) + "… (" + u.length + " תווים)";
+    }
+
+    // שליפת תוכן כתובת תמונה כ-dataURL דרך טמפרמונקי (עוקף CORS, עם
+    // הקוקיז של הדפדפן). מחזיר null אם התשובה אינה תמונה או שנכשלה.
+    function fetchImageDataURL(url) {
+        return new Promise(function (resolve) {
+            if (!url || url.indexOf("http") !== 0) { resolve(null); return; }
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                responseType: "blob",
+                timeout: 60000,
+                onload: function (resp) {
+                    try {
+                        if (resp.status !== 200 || !resp.response ||
+                            resp.response.size < 1024) { resolve(null); return; }
+                        const reader = new FileReader();
+                        reader.onload = function () { resolve(reader.result || null); };
+                        reader.onerror = function () { resolve(null); };
+                        reader.readAsDataURL(resp.response);
+                    } catch (e) { resolve(null); }
+                },
+                onerror: function () { resolve(null); },
+                ontimeout: function () { resolve(null); }
+            });
+        });
+    }
+
+    // בדיקת תוכן כתובת מקור לפני שליחה: מתברר שגוגל משרת מכתובת gg גם את
+    // מוזאיקת השגיאה עצמה - הכתובת "תקינה" אך התוכן בה הוא המוזאיקה.
+    // חייבים להוריד ולבדוק פיקסלים לפני ששולחים לשרת, אחרת מוזאיקה
+    // עולה לדרייב כאילו הייתה תמונה אמיתית.
+    async function validateSourceURL(url) {
+        const dataURL = await fetchImageDataURL(url);
+        if (!dataURL || dataURL.indexOf("data:image") !== 0) {
+            return { ok: false, reason: "no-image" };
+        }
+        if (await looksLikePlaceholderMosaic(dataURL)) {
+            return { ok: false, reason: "mosaic" };
+        }
+        return { ok: true };
+    }
+
+    function sourceRejectNotice(reason) {
+        if (reason === "mosaic") {
+            return "🚩 גוגל משרת מהכתובת את מוזאיקת השגיאה עצמה - לא נשלח לדרייב. נסה לבקש שוב";
+        }
+        return "🚩 הכתובת לא מחזירה תמונה תקינה - לא נשלח לדרייב. נסה לבקש שוב";
+    }
+
     // בונה רשומת העלאה מאלמנט תמונה. מחזיר Promise שמתפוגג לרשומה או null.
     // עדיפות העלאה: כתובת מקור אמיתית של גוגל (השרת שולף בעצמו - איכות
     // מלאה ובלי חסימת נטפרי) ורק אחר כך בייטים מהדפדפן (canvas).
@@ -589,6 +650,13 @@
         // מגוגל, גם אם התצוגה בדפדפן נכשלה
         if (isGeneratedSrc(src)) {
             if (urlAlreadyQueued(src)) return null;
+            const check = await validateSourceURL(src);
+            if (!check.ok) {
+                failNotice("mosaic:" + srcKey, sourceRejectNotice(check.reason));
+                lastBuildFailReason =
+                    "🚩 כתובת המקור נפסלה בבדיקת תוכן (" + check.reason + ") - לא נשלח לדרייב";
+                return null;
+            }
             rememberConsumedSourceURL(src);
             return {
                 key: srcKey,
@@ -614,6 +682,12 @@
 
                 for (const u of urls) {
                     if (urlAlreadyQueued(u)) continue;
+                    const check = await validateSourceURL(u);
+                    if (!check.ok) {
+                        lastBuildFailReason =
+                            "🚩 כתובת מקור בתשובה נפסלה בבדיקת תוכן: " + check.reason;
+                        continue;
+                    }
                     rememberConsumedSourceURL(u);
                     return {
                         key: keyForSrc(u),
@@ -624,10 +698,12 @@
                     };
                 }
 
-                // אין כתובת מקור - מוותרים במקום להעלות את הפלייסהולדר
+                // אין כתובת מקור תקינה - מוותרים במקום להעלות את הפלייסהולדר
+                failNotice("mosaic:" + srcKey,
+                    "🚩 זוהתה תמונה חסומה לתצוגה ולא נמצאה כתובת מקור תקינה - לא נשלח לדרייב. נסה לבקש שוב");
                 lastBuildFailReason =
                     "🚩 זוהתה תמונה חסומה לתצוגה, אך לא נמצאה כתובת מקור " +
-                    "בתשובה - מוותרים כדי שלא תעלה מוזאיקת שגיאה. " +
+                    "תקינה בתשובה - מוותרים כדי שלא תעלה מוזאיקת שגיאה. " +
                     "אם זו הייתה תמונה אמיתית, שלח את פלט כפתור 🔍 אבחון";
                 return null;
             }
@@ -647,6 +723,12 @@
                         const urls = findGeneratedURLsIn(container);
                         for (const u of urls) {
                             if (urlAlreadyQueued(u)) continue;
+                            const check = await validateSourceURL(u);
+                            if (!check.ok) {
+                                lastBuildFailReason =
+                                    "🚩 כתובת מקור בתשובה נפסלה בבדיקת תוכן: " + check.reason;
+                                continue;
+                            }
                             rememberConsumedSourceURL(u);
                             showToast("🛜 התמונה נחסמה לתצוגה - נשלפה ישירות מגוגל לדרייב");
                             return {
@@ -1526,7 +1608,7 @@
                     const urls = findGeneratedURLsIn(container);
                     placeholderInfo =
                         "\n     🚩 פלייסהולדר! כתובות מקור בתשובה: " +
-                        (urls.length ? urls.join(" , ") : "(לא נמצאו)");
+                        (urls.length ? urls.map(function (u) { return shortUrl(u); }).join(" , ") : "(לא נמצאו)");
                 }
             }
 
@@ -1583,7 +1665,7 @@
         }
 
         const summary =
-            "גרסה 1.6 | אימות: " + (authed ? "✅" : "❌") +
+            "גרסה " + SCRIPT_VERSION + " | אימות: " + (authed ? "✅" : "❌") +
             " | העלאה אוטומטית: " + (autoMode ? "✅" : "❌") +
             "\nמייל: " + (getEmail() || "(לא הוזן)") +
             "\nסה\"כ תמונות בעמוד: " + imgs.length +
@@ -1594,8 +1676,15 @@
             "\nכתובות blob שנצפו: " + blobFirstSeenAt.size +
             " (מהן בהמתנה לייצוב: " + settling + ")" +
             "\nכתובות תוצר ביומן הרשת: " + ggURLs.length +
-            (ggURLs.length ? "\n" + ggURLs.join("\n") : "") +
             hint;
+
+        // הכתובות המלאות מוצגות רק באזור הקוד הניתן לגלילה - לא בסיכום,
+        // כתובת ענקית בסיכום גורמת לחלון לגלוש מחוץ למסך
+        if (ggURLs.length) {
+            lines.push("");
+            lines.push("כתובות תוצר ביומן הרשת:");
+            ggURLs.forEach(function (u) { lines.push(u); });
+        }
 
         showDiagModal(summary, lines);
     }
@@ -1615,7 +1704,7 @@
 
         const sum = document.createElement("p");
         sum.innerText = summary;
-        Object.assign(sum.style, { color: "#333", fontSize: "14px", fontWeight: "bold" });
+        Object.assign(sum.style, { color: "#333", fontSize: "14px", fontWeight: "bold", overflowWrap: "anywhere", margin: "0 0 10px 0" });
 
         const pre = document.createElement("pre");
         pre.innerText = lines.length ? lines.join("\n") : "(אין תמונות גדולות בעמוד)";
@@ -1641,6 +1730,16 @@
         closeBtn.innerText = "סגור";
         Object.assign(closeBtn.style, buttonStyle("#E2E8F0", "#333"));
         closeBtn.onclick = closeCurrentOverlay;
+
+        // סגירה בלחיצה על הרקע או ב-Escape - שהחלון לא יחסום את הדף
+        overlay.addEventListener("click", function (e) {
+            if (e.target === overlay) closeCurrentOverlay();
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && currentOverlay === overlay) {
+                closeCurrentOverlay();
+            }
+        });
 
         const row = document.createElement("div");
         Object.assign(row.style, { display: "flex", gap: "10px", marginTop: "12px" });
