@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -54,18 +54,22 @@
     // כמה ניסיונות העלאה מקסימום לכל תמונה לפני שנזרוק אותה מהתור
     const MAX_UPLOAD_TRIES = 5;
 
+    // כמה זמן לחכות אחרי שתמונת blob נצפתה לראשונה לפני עיבוד -
+    // נותן לגמיני זמן להציג פלייסהולדר (עם תמונת gg שבורה לצדו)
+    // אם התצוגה נכשלה, כך שנספיק לזהות את זה לפני שחילצנו מה-canvas
+    const BLOB_SETTLE_MS = 3000;
+
     // key -> { prompt, image (dataURL) או image_url, ts }
     const pending = new Map();
 
-    // כתובות מקור שכבר "נצרכו" לתמונה מסוימת - כדי ששתי תמונות לא
-    // יתאימו לאותה כתובת מקור
+    // כתובות תוצר שכבר שויכו להעלאה - כדי שאותה תמונה לא תעלה פעמיים
     const consumedSourceURLs = new Set();
-
-    // כמה תמונות blob שויכו עד עתה לכתובת מקור - לשידוך לפי סדר
-    let consumedBlobCount = 0;
 
     const uploadingKeys = new Set();
     const uploadedKeys = new Set();
+
+    // זמן הצפייה הראשון של כל תמונת blob - להשהיית עיבוד עד שהתצוגה מתייצבת
+    const blobFirstSeenAt = new WeakMap();
 
     function trimKeySet(set, max) {
         while (set.size > max) {
@@ -338,53 +342,82 @@
     }
 
     // ============================================================
-    // איתור כתובת המקור האמיתית של תמונת blob ביומן הרשת של הדף
+    // איתור כתובת המקור האמיתית של תמונת blob בתוך התשובה
     // ============================================================
-    // תמונות גמיני מוצגות בדף דרך blob: - אבל מאחורי הקלעים יש
-    // כתובת googleusercontent אמיתית. היא נטענת פעם אחת ונשמרת
-    // ביומן הרשת (performance entries) של הדף. השרת שלנו - בלי
-    // סינון נטפרי - יכול לשלוף משם את התמונה המקורית במלוא איכותה,
-    // גם כשהתצוגה בדפדפן נכשלה בגלל הסינון.
+    // תמונות גמיני מוצגות בדף דרך blob: - אבל בתוך התשובה עצמה
+    // (למשל <img> שנכשלה בטעינה, או קישור הורדה) מופיעה גם
+    // כתובת googleusercontent אמיתית. השרת שלנו - בלי סינון
+    // נטפרי - שולף ממנה את התמונה המקורית במלוא איכותה, גם כשהתצוגה
+    // בדפדפן נכשלה בגלל הסינון.
 
-    function findSourceURLForBlob() {
+    // מאתר את התשובה (ה-container) שאליה שייכת התמונה
+    function responseContainerFor(img) {
+        return composedClosest(img, "model-response") ||
+            composedClosest(img, "[class*='model-response']") ||
+            composedClosest(img, "[class*='conversation-container']") ||
+            document;
+    }
 
-        let entries = [];
-        try {
-            entries = performance.getEntriesByType("resource");
-        } catch (e) {
-            return "";
+    // כתובות תוצר של גמיני (gg/labs-ai) בתוך אלמנט - בין אם זו תמונה
+    // שנכשלה בטעינה בדפדפן (נטפרי) ובין אם קישור הורדה. אלה הכתובות
+    // שהשרת שלנו שולף מהן את התמונה האמיתית ישירות מגוגל, בלי סינון.
+    function findGeneratedURLsIn(container) {
+
+        const urls = [];
+        const seen = {};
+
+        function push(u) {
+            if (!u || seen[u]) return;
+            if (!/googleusercontent\.com\/(gg|labs-ai)\//.test(u)) return;
+            seen[u] = true;
+            urls.push(u);
         }
 
-        // אוספים את כל כתובות googleusercontent שנטענו בדף וטרם
-        // שויכו לאף תמונה. תמונות מקור של גמיני הן בדרך כלל מהצורה
-        // lh3.googleusercontent.com/gg/... - מסננים אווטארים (/a/)
-        // ותמונות זעירות (=s64 וכדומה).
-        const candidates = [];
+        deepQueryAll(container, "img").forEach(function (img) {
+            push(img.currentSrc || img.src || "");
+        });
 
-        for (let i = 0; i < entries.length; i++) {
-            const name = entries[i].name || "";
+        deepQueryAll(container, "a[href]").forEach(function (a) {
+            push(a.getAttribute("href") || "");
+        });
 
-            if (!/googleusercontent\.com\//.test(name)) continue;
-            if (/googleusercontent\.com\/a\//.test(name)) continue;
-            if (/=s(\d{1,3})(\$|\?|$)/.test(name)) continue; // זעירות
-            if (consumedSourceURLs.has(name)) continue;
+        return urls;
+    }
 
-            candidates.push(name);
+    // האם התשובה מכילה תמונת תוצר שנכשלה בטעינה - סימן שמה שמוצג
+    // במקומה הוא פלייסהולדר של גמיני ולא התמונה עצמה
+    function containerHasBrokenGeneratedImage(container) {
+
+        const imgs = deepQueryAll(container, "img");
+
+        for (const img of imgs) {
+            const src = img.currentSrc || img.src || "";
+            if (/googleusercontent\.com\/(gg|labs-ai)\//.test(src) &&
+                img.complete && (img.naturalWidth || 0) === 0) {
+                return true;
+            }
         }
 
-        if (!candidates.length) return "";
-
-        // שידוך לפי סדר: התמונה ה-k שנתפסה מקבלת את כתובת המקור
-        // ה-k שנטענה בעמוד. כך גם אחרי רענון עם היסטוריה ארוכה
-        // ההתאמה נשמרת (יומן הרשת ממוין לפי זמן טעינה).
-        const picked = candidates[consumedBlobCount] || "";
-
-        return picked;
+        return false;
     }
 
     function rememberConsumedSourceURL(url) {
         consumedSourceURLs.add(url);
         trimKeySet(consumedSourceURLs, MAX_UPLOADED_KEYS);
+    }
+
+    // האם הכתובת היא כתובת תוצר של גמיני (gg/labs-ai)
+    function isGeneratedSrc(src) {
+        return /googleusercontent\.com\/(gg|labs-ai)\//.test(src || "");
+    }
+
+    // האם כתובת המקור כבר נתפסה/ממתינה/הועלתה - לא לתפוס פעמיים
+    function urlAlreadyQueued(url) {
+        const key = keyForSrc(url);
+        return consumedSourceURLs.has(url) ||
+            uploadedKeys.has(key) ||
+            uploadingKeys.has(key) ||
+            pending.has(key);
     }
 
     // בונה רשומת העלאה מאלמנט תמונה. מחזיר Promise שמתפוגג לרשומה או null.
@@ -405,11 +438,11 @@
         // שוב בזמן שהחילוץ מתבצע
         const srcKey = keyForSrc(src);
 
-        const isGuser = /googleusercontent\.com/.test(src);
-
-        // כתובת גוגל אמיתית (גם אם התצוגה בדפדפן נכשלה) - השרת יוריד
-        // משם את התמונה המקורית במלוא איכותה
-        if (isGuser) {
+        // 1) המקור עצמו הוא כתובת תוצר של גמיני - השרת ישלוף ממנה ישירות
+        // מגוגל, גם אם התצוגה בדפדפן נכשלה
+        if (isGeneratedSrc(src)) {
+            if (urlAlreadyQueued(src)) return null;
+            rememberConsumedSourceURL(src);
             return {
                 key: srcKey,
                 srcKey: srcKey,
@@ -419,25 +452,37 @@
             };
         }
 
-        // תמונת blob: מחפשים את כתובת המקור שממנה נוצרה ביומן הרשת
+        // 2) תמונת blob:
         if (src.startsWith("blob:")) {
 
-            if (!broken) {
-                const realURL = findSourceURLForBlob();
+            const container = responseContainerFor(img);
 
-                if (realURL) {
-                    rememberConsumedSourceURL(realURL);
-                    consumedBlobCount++;
+            // פלייסהולדר: בתשובה יש תמונת תוצר שגוגל שלחה והדפדפן לא
+            // הצליח להציג (נטפרי). מה שמוצג במקומה הוא מוזאיקת השגיאה
+            // שגמיני מייצר - אסור לחלץ אותה ל-canvas ולהעלות אותה.
+            // מעלים רק את כתובת המקור אם נמצאה בתשובה.
+            if (containerHasBrokenGeneratedImage(container)) {
+
+                const urls = findGeneratedURLsIn(container);
+
+                for (const u of urls) {
+                    if (urlAlreadyQueued(u)) continue;
+                    rememberConsumedSourceURL(u);
                     return {
-                        key: srcKey,
+                        key: keyForSrc(u),
                         srcKey: srcKey,
                         image: "",
-                        image_url: realURL,
+                        image_url: u,
                         prompt: prompt
                     };
                 }
 
-                // אין כתובת מקור - מחלצים את הבייטים מהתצוגה עצמה
+                // אין כתובת מקור - מוותרים במקום להעלות את הפלייסהולדר
+                return null;
+            }
+
+            // blob תקין של תמונה שמוצגת באמת - מחלצים את הבייטים מהתצוגה
+            if (!broken) {
                 const dataURL = await imageToDataURL(img, src);
 
                 if (dataURL) {
@@ -455,6 +500,20 @@
             return null;
         }
 
+        // 3) כתובת googleusercontent אחרת (לא gg) שנטענה בהצלחה -
+        // גם אותה השרת יכול לשלוף בעצמו
+        if (!broken && /googleusercontent\.com/.test(src)) {
+            if (urlAlreadyQueued(src)) return null;
+            return {
+                key: srcKey,
+                srcKey: srcKey,
+                image: "",
+                image_url: src,
+                prompt: prompt
+            };
+        }
+
+        // 4) תמונת data: שנטענה בהצלחה
         if (!broken && src.startsWith("data:image")) {
             return {
                 key: keyForDataURL(src),
@@ -495,6 +554,17 @@
                 if (entry.srcKey === srcKey) dupKey = true;
             });
             if (dupKey) continue;
+
+            // השהיה קצרה לתמונות blob שזה עתה נצפו - נותן לגמיני זמן
+            // להציג פלייסהולדר אם התצוגה נכשלה, לפני שנחלץ מה-canvas
+            if (src.startsWith("blob:")) {
+                const firstSeen = blobFirstSeenAt.get(img);
+                if (!firstSeen) {
+                    blobFirstSeenAt.set(img, Date.now());
+                    continue;
+                }
+                if (Date.now() - firstSeen < BLOB_SETTLE_MS) continue;
+            }
 
             const entry = await buildEntry(img);
 
@@ -1236,12 +1306,25 @@
                 /googleusercontent\.com/.test(src) ? "guser" :
                 /gstatic\.com/.test(src) ? "gstatic" : "אחר";
 
+            // זיהוי פלייסהולדר: התשובה מכילה תמונת תוצר שנכשלה בטעינה
+            let placeholderInfo = "";
+            if (pass) {
+                const container = responseContainerFor(img);
+                if (containerHasBrokenGeneratedImage(container)) {
+                    const urls = findGeneratedURLsIn(container);
+                    placeholderInfo =
+                        "\n     🚩 פלייסהולדר! כתובות מקור בתשובה: " +
+                        (urls.length ? urls.join(" , ") : "(לא נמצאו)");
+                }
+            }
+
             lines.push(
                 (pass ? "✅ תיתפס" : "❌ נפסלה") +
                 " | " + srcType +
                 " | גודל " + w + "x" + h +
                 (loaded ? "" : " (טעינה נכשלה" + (cw ? ", מוצג " + cw + "x" + ch : "") + ")") +
-                " | " + src.substring(0, 70)
+                " | " + src.substring(0, 70) +
+                placeholderInfo
             );
         });
 
