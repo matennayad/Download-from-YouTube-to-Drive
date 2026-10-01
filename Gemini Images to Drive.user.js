@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         תמונות גמיני לדרייב - מטען נייד
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  כל תמונה שגמיני יוצר נשלחת אוטומטית לשרת החיצוני ועולה לדרייב - כך התמונות נשמרות אצלך בדרייב ולא רק בהתכתבות
 // @match       https://gemini.google.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -68,8 +68,26 @@
     const uploadingKeys = new Set();
     const uploadedKeys = new Set();
 
-    // זמן הצפייה הראשון של כל תמונת blob - להשהיית עיבוד עד שהתצוגה מתייצבת
-    const blobFirstSeenAt = new WeakMap();
+    // זמן הצפייה הראשון של כל כתובת blob - להשהיית עיבוד עד שהתצוגה
+    // מתייצבת. המפתח הוא הכתובת עצמה ולא האלמנט: גמיני בונה מחדש את
+    // ה-DOM ומחליף אלמנטים תדיר, ומפתח לפי אלמנט מאפס את המניין לנצח
+    // והתוסף נשאר שקוט לנצח
+    const blobFirstSeenAt = new Map();
+
+    // סיבת הכשל האחרונה בבניית רשומת העלאה - להצגה למשתמש
+    let lastBuildFailReason = "";
+
+    // הודעות כשל מדוכאות: לא יותר מאחת ל-30 שניות לאותו סוג כשל,
+    // כדי שסריקה חוזרת כל 2.5 שניות לא תציף את המסך
+    const failToastAt = new Map();
+    const FAIL_TOAST_COOLDOWN_MS = 30000;
+
+    function failNotice(key, text) {
+        const now = Date.now();
+        if ((failToastAt.get(key) || 0) > now - FAIL_TOAST_COOLDOWN_MS) return;
+        failToastAt.set(key, now);
+        showToast(text);
+    }
 
     function trimKeySet(set, max) {
         while (set.size > max) {
@@ -425,6 +443,8 @@
     // מלאה ובלי חסימת נטפרי) ורק אחר כך בייטים מהדפדפן (canvas).
     async function buildEntry(img) {
 
+        lastBuildFailReason = "";
+
         const src = img.currentSrc || img.src || "";
         if (!src) return null;
 
@@ -478,6 +498,10 @@
                 }
 
                 // אין כתובת מקור - מוותרים במקום להעלות את הפלייסהולדר
+                lastBuildFailReason =
+                    "🚩 זוהתה תמונה חסומה לתצוגה, אך לא נמצאה כתובת מקור " +
+                    "בתשובה - מוותרים כדי שלא תעלה מוזאיקת שגיאה. " +
+                    "אם זו הייתה תמונה אמיתית, שלח את פלט כפתור 🔍 אבחון";
                 return null;
             }
 
@@ -495,6 +519,10 @@
                     };
                 }
             }
+
+            lastBuildFailReason = broken
+                ? "❌ תמונת blob שבורה שאינה פלייסהולדר - אין כתובת מקור לשליפה"
+                : "❌ לא הצלחתי לחלץ את בייטי התמונה מהעמוד (canvas/fetch נכשלו)";
 
             // blob שבור או שלא ניתן לחילוץ - אין מה לעשות איתו
             return null;
@@ -524,6 +552,7 @@
             };
         }
 
+        lastBuildFailReason = "❌ מקור תמונה לא נתמך: " + src.substring(0, 60);
         return null;
     }
 
@@ -556,19 +585,35 @@
             if (dupKey) continue;
 
             // השהיה קצרה לתמונות blob שזה עתה נצפו - נותן לגמיני זמן
-            // להציג פלייסהולדר אם התצוגה נכשלה, לפני שנחלץ מה-canvas
+            // להציג פלייסהולדר אם התצוגה נכשלה, לפני שנחלץ מה-canvas.
+            // מפתח לפי כתובת ה-blob (ולא האלמנט) - האלמנט עצמו עלול
+            // להתחלף בכל רינדור מחדש של גמיני
             if (src.startsWith("blob:")) {
-                const firstSeen = blobFirstSeenAt.get(img);
+                const firstSeen = blobFirstSeenAt.get(src);
                 if (!firstSeen) {
-                    blobFirstSeenAt.set(img, Date.now());
+                    blobFirstSeenAt.set(src, Date.now());
                     continue;
                 }
                 if (Date.now() - firstSeen < BLOB_SETTLE_MS) continue;
             }
 
-            const entry = await buildEntry(img);
+            let entry = null;
+            try {
+                entry = await buildEntry(img);
+            } catch (e) {
+                console.error("שגיאה בעיבוד תמונה:", e);
+                failNotice("err:" + srcKey,
+                    "❌ שגיאה בעיבוד תמונה: " +
+                    (e && e.message ? e.message : e));
+                continue;
+            }
 
-            if (!entry) continue;
+            if (!entry) {
+                if (lastBuildFailReason) {
+                    failNotice("fail:" + srcKey, lastBuildFailReason);
+                }
+                continue;
+            }
 
             // תמונה זהה שכבר הועלתה בסשן (למשל גמיני הציג אותה שוב
             // עם blob URL חדש) - לא מעלים פעמיים
@@ -584,6 +629,11 @@
 
             addPending(entry);
             found++;
+        }
+
+        // ניקוי מפתחות blob ישנים - לא לצבור לנצח
+        while (blobFirstSeenAt.size > MAX_UPLOADED_KEYS) {
+            blobFirstSeenAt.delete(blobFirstSeenAt.keys().next().value);
         }
 
         return found;
@@ -1318,12 +1368,26 @@
                 }
             }
 
+            // מצב ההמתנה לייצוב של blob מועמד - להבין למה הוא עדיין לא נשלח
+            let waitInfo = "";
+            if (pass && src.startsWith("blob:")) {
+                const t = blobFirstSeenAt.get(src);
+                if (!t) {
+                    waitInfo = " | ⏳ ייצפה בסריקה הבאה";
+                } else if (Date.now() - t < BLOB_SETTLE_MS) {
+                    waitInfo = " | ⏳ ממתין לייצוב (עוד " +
+                        Math.ceil((BLOB_SETTLE_MS - (Date.now() - t)) / 1000) +
+                        " שניות)";
+                }
+            }
+
             lines.push(
                 (pass ? "✅ תיתפס" : "❌ נפסלה") +
                 " | " + srcType +
                 " | גודל " + w + "x" + h +
                 (loaded ? "" : " (טעינה נכשלה" + (cw ? ", מוצג " + cw + "x" + ch : "") + ")") +
                 " | " + src.substring(0, 70) +
+                waitInfo +
                 placeholderInfo
             );
         });
@@ -1338,11 +1402,38 @@
             });
         } catch (e) {}
 
+        // כמה כתובות blob עדיין בחלון ההמתנה לייצוב
+        let settling = 0;
+        blobFirstSeenAt.forEach(function (t) {
+            if (Date.now() - t < BLOB_SETTLE_MS) settling++;
+        });
+
+        // רמז לפי המצב - כדי שהמשתמש ידע מה לעשות בלי לנחש
+        let hint = "";
+        if (candidates > 0 && !authed) {
+            hint = "\n⚠️ לא מאומת - לחץ על כפתור 🖼️ והתחבר";
+        } else if (candidates > 0 && !autoMode && pending.size === 0 &&
+                   uploadingKeys.size === 0) {
+            hint = "\n⚠️ ההעלאה האוטומטית כבויה - לחץ על כפתור 🖼️ והפעל אותה";
+        } else if (candidates > 0 && pending.size === 0 &&
+                   uploadingKeys.size === 0 && settling === 0) {
+            hint = "\n⚠️ יש מועמדת שלא נשלחה - שלח פלט זה לתמיכה";
+        }
+
         const summary =
-            "סה\"כ תמונות בעמוד: " + imgs.length +
+            "גרסה 1.6 | אימות: " + (authed ? "✅" : "❌") +
+            " | העלאה אוטומטית: " + (autoMode ? "✅" : "❌") +
+            "\nמייל: " + (getEmail() || "(לא הוזן)") +
+            "\nסה\"כ תמונות בעמוד: " + imgs.length +
             "\nמועמדות להעלאה: " + candidates +
+            "\nממתינות בתור: " + pending.size +
+            " | בהעלאה כרגע: " + uploadingKeys.size +
+            " | הועלו בסשן: " + uploadedKeys.size +
+            "\nכתובות blob שנצפו: " + blobFirstSeenAt.size +
+            " (מהן בהמתנה לייצוב: " + settling + ")" +
             "\nכתובות תוצר ביומן הרשת: " + ggURLs.length +
-            (ggURLs.length ? "\n" + ggURLs.join("\n") : "");
+            (ggURLs.length ? "\n" + ggURLs.join("\n") : "") +
+            hint;
 
         showDiagModal(summary, lines);
     }
