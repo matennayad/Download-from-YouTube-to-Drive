@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.3
+// @version     1.4
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -198,6 +198,8 @@
     const POST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 17h3l2-4V7H5v6h3l-2 4zm8 0h3l2-4V7h-6v6h3l-2 4z"/></svg>`;
     const TOPIC_PATH = /^\/topic\/(\d+)(?:\/([^/?#]+))?/;
     const POST_PATH = /^\/post\/(\d+)/;
+
+    const OPEN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zM5 5h6v2H5v12h12v-6h2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>`;
 
     const sizeCache = new Map();
     const topicCache = new Map();
@@ -490,30 +492,56 @@
         const media = document.createElement("span");
         media.className = "mf-link-media";
 
+        const host = url.hostname.replace(/^www\./, "");
+        let path = url.pathname + url.search;
+        try { path = decodeURIComponent(path); } catch (e) {}
+        if (path === "/") path = "";
+
+        // שורה: הסמל של האתר, שם האתר והכתובת, וחץ של פתיחה בלשונית חדשה
+        const row = document.createElement("span");
+        row.className = "mf-link-row";
+
+        const icon = document.createElement("span");
+        icon.className = "mf-link-icon";
+        const favicon = document.createElement("img");
+        favicon.alt = "";
+        favicon.loading = "lazy";
+        favicon.referrerPolicy = "no-referrer";
+        favicon.addEventListener("error", () => { icon.innerHTML = GLOBE_ICON; });
+        favicon.src = `${url.origin}/favicon.ico`;
+        icon.appendChild(favicon);
+
         const body = document.createElement("span");
         body.className = "mf-link-body";
         const title = document.createElement("span");
         title.className = "mf-link-title";
         title.dir = "auto";
         // בכרטיס - שם האתר, ולא המילה שעליה לוחצים בטקסט (כמו "כאן")
-        title.textContent = url.hostname.replace(/^www\./, "");
+        title.textContent = host;
         const desc = document.createElement("span");
         desc.className = "mf-link-desc";
         desc.dir = "auto";
         const site = document.createElement("span");
         site.className = "mf-link-site";
         site.dir = "ltr";
-        // בלי תצוגה מקדימה, הכתובת המלאה עוזרת להבין לאן הקישור מוביל
-        let path = url.pathname;
-        try { path = decodeURIComponent(path); } catch (e) {}
-        site.textContent = url.hostname.replace(/^www\./, "") + (path === "/" ? "" : path);
+        // שם האתר כבר בכותרת, אז כאן רק ההמשך של הכתובת
+        site.textContent = path || host;
         body.append(title, desc, site);
 
-        card.append(media, body);
+        const arrow = document.createElement("span");
+        arrow.className = "mf-link-arrow";
+        arrow.innerHTML = OPEN_ICON;
+
+        row.append(icon, body, arrow);
+        card.append(media, row);
 
         getPreview(href).then((p) => {
             if (!p) return;
-            if (p.title) title.textContent = p.title;
+            if (p.title) {
+                // הכותרת של הדף מחליפה את שם האתר - אז שם האתר עובר לשורת הכתובת
+                title.textContent = p.title;
+                site.textContent = host + path;
+            }
             if (p.description) desc.textContent = p.description;
             if (p.image) {
                 card.classList.add("mf-has-media");
@@ -1229,32 +1257,33 @@
 }
 
 /* ---- כרטיסי קישורים ---- */
+/* רשת של כרטיסים: הסמל של האתר בריבוע צבעוני, שם האתר והכתובת, וחץ של פתיחה בלשונית חדשה */
 
 .mf-links {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  max-width: 760px;
 }
 
 .mf-link {
   display: flex;
   flex-direction: column;
-  width: 400px;
-  max-width: 100%;
-  border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.3));
-  border-radius: 14px;
+  min-width: 0;
+  border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.25));
+  border-radius: 12px;
   overflow: hidden;
   background: var(--bs-body-bg, #fff);
   color: var(--bs-body-color, inherit) !important;
   text-decoration: none !important;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .mf-link:hover,
 .mf-link:focus-visible {
   border-color: rgba(13, 110, 253, 0.45);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: rgba(13, 110, 253, 0.05);
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.12);
   outline: none;
 }
 
@@ -1266,7 +1295,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 210px;
+  height: 150px;
   background: rgba(128, 128, 128, 0.12);
 }
 
@@ -1278,29 +1307,60 @@
 }
 
 .mf-link-media.mf-broken svg {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
+}
+
+.mf-link-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.mf-link-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: rgba(13, 110, 253, 0.1);
+  color: var(--bs-link-color, #0d6efd);
+}
+
+.mf-link-icon img {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.mf-link-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .mf-link-body {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 14px 10px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .mf-link-title {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.35;
-  font-weight: 500;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-weight: 600;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mf-link-desc {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--bs-secondary-color, #6c757d);
   display: -webkit-box;
@@ -1320,6 +1380,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mf-link-arrow {
+  flex: none;
+  display: flex;
+  color: var(--bs-secondary-color, #8a939c);
+  opacity: 0.7;
+  transition: color 0.15s, opacity 0.15s;
+}
+
+.mf-link-arrow svg {
+  width: 16px;
+  height: 16px;
+  transform: scaleX(-1);
+}
+
+.mf-link:hover .mf-link-arrow {
+  color: var(--bs-link-color, #0d6efd);
+  opacity: 1;
 }
 
 /* ---- באנר לנושא בפורום ---- */
