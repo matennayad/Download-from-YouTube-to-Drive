@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.2
+// @version     1.3
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -495,7 +495,8 @@
         const title = document.createElement("span");
         title.className = "mf-link-title";
         title.dir = "auto";
-        title.textContent = text && text !== href ? text : url.hostname;
+        // בכרטיס - שם האתר, ולא המילה שעליה לוחצים בטקסט (כמו "כאן")
+        title.textContent = url.hostname.replace(/^www\./, "");
         const desc = document.createElement("span");
         desc.className = "mf-link-desc";
         desc.dir = "auto";
