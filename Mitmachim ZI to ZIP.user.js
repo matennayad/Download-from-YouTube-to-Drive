@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.0
+// @version     1.1
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -1431,17 +1431,59 @@ a.mf-topic:focus-visible {
   height: 1em;
 }
 
-/* ---- באנר לקובץ מצורף בתוך הפוסט ---- */
-/* משתמש בעיצוב של הבאנר לנושאים (mf-topic), עם אייקון של סוג הקובץ במקום אייקון הצ'אט */
+/* ---- תגית לקובץ מצורף בתוך הפוסט ---- */
+/* תגית קטנה ומעוגלת בתוך השורה: אייקון קטן, שם הקובץ והגודל */
 
-.mf-topic-icon.mf-filebanner-icon {
+a.mf-topic.mf-filebanner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 3px 12px 3px 10px;
+  border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.25));
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg, #f0f2f5);
+  vertical-align: middle;
+}
+
+a.mf-topic.mf-filebanner:hover,
+a.mf-topic.mf-filebanner:focus-visible {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.35);
+  box-shadow: none;
+}
+
+.mf-filebanner .mf-topic-icon {
+  width: auto;
+  height: auto;
   background: none;
 }
 
-.mf-filebanner-icon svg {
-  width: 30px;
-  height: 38px;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
+.mf-filebanner .mf-topic-icon svg {
+  width: 15px;
+  height: 19px;
+}
+
+.mf-filebanner .mf-topic-body {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.mf-filebanner .mf-topic-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-filebanner .mf-topic-meta {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* הגודל באנגלית בתוך שורה בעברית - מבודד כדי שלא יתערבב עם "קובץ ZIP" */
