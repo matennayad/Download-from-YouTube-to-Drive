@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.5
+// @version     1.6
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -955,11 +955,8 @@
             const last = el.lastElementChild;
             return last && last === el.lastChild && last.matches("ol, ul") ? lineEnd(last) || el : el;
         }
+        // ציטוט לא נחשב שורה קודמת: ספויילר שבא אחריו הוא לא חלק מהציטוט, ונשאר כפתור רגיל
         if (el.matches("p, h1, h2, h3, h4, h5, h6")) return el;
-        if (el.matches("blockquote")) {
-            const last = el.lastElementChild;
-            return last && last.matches("p") ? last : null;
-        }
         return null;
     }
 
