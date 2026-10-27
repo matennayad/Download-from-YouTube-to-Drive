@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.1
+// @version     1.2
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -698,10 +698,83 @@
         }
     }
 
+    // ---- באנר לקישורים לאתרים אחרים ----
+    // קישור חיצוני שמופיע ככתובת גולמית מוחלף בבאנר עם הסמל של האתר, השם והכתובת
+
+    const GLOBE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.93 6h-2.95a15.6 15.6 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.93 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14a7.9 7.9 0 0 1 0-4h3.38a16.5 16.5 0 0 0 0 4H4.26zm.81 2h2.95c.32 1.25.78 2.45 1.38 3.56A7.99 7.99 0 0 1 5.07 16zm2.95-8H5.07a7.99 7.99 0 0 1 4.33-3.56A15.6 15.6 0 0 0 8.02 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14a16.5 16.5 0 0 0 0-4h3.38a7.9 7.9 0 0 1 0 4h-3.38z"/></svg>`;
+
+    // רק קישור שמוצג ככתובת; קישור עם טקסט משלו (כמו "כאן") נשאר כמו שהוא
+    function isBareExternal(link, url) {
+        const text = link.textContent.trim().replace(/\/$/, "");
+        if (!text) return false;
+        if (/^(https?:\/\/|www\.)/i.test(text)) return true;
+        return text === url.hostname || text === url.hostname.replace(/^www\./, "");
+    }
+
+    function decorateLinks(content) {
+        for (const link of content.querySelectorAll("a[href]:not(.mf-topic)")) {
+            if (link.closest(".mf-panel") || link.querySelector("img")) continue;
+            const url = toUrl(link.getAttribute("href"));
+            if (!url || isSiteHost(url.hostname) || IMAGE_EXT.test(url.pathname) || !isBareExternal(link, url)) continue;
+
+            topicOriginals.set(link, link.innerHTML);
+            link.classList.add("mf-topic", "mf-extlink");
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            stopSiteNavigation(link);
+
+            // הסמל של האתר; אם הוא חסום או לא קיים - סמל של גלובוס
+            const icon = document.createElement("span");
+            icon.className = "mf-topic-icon mf-extlink-icon";
+            const favicon = document.createElement("img");
+            favicon.alt = "";
+            favicon.loading = "lazy";
+            favicon.referrerPolicy = "no-referrer";
+            favicon.addEventListener("error", () => { icon.innerHTML = GLOBE_ICON; });
+            favicon.src = `${url.origin}/favicon.ico`;
+            icon.appendChild(favicon);
+
+            const host = url.hostname.replace(/^www\./, "");
+            let path = url.pathname + url.search;
+            try { path = decodeURIComponent(path); } catch (e) {}
+            if (path === "/") path = "";
+
+            const body = document.createElement("span");
+            body.className = "mf-topic-body";
+            const title = document.createElement("span");
+            title.className = "mf-topic-title";
+            title.dir = "auto";
+            title.textContent = host;
+            const desc = document.createElement("span");
+            desc.className = "mf-topic-desc mf-extlink-path";
+            desc.dir = "ltr";
+            desc.textContent = path;
+            const meta = document.createElement("span");
+            meta.className = "mf-topic-meta";
+            meta.textContent = "קישור לאתר חיצוני";
+            body.append(title, desc, meta);
+
+            link.replaceChildren(icon, body);
+
+            // עם תצוגה מקדימה פעילה - הכותרת והתיאור האמיתיים של הדף
+            if (!settings.links) continue;
+            getPreview(url.href).then((p) => {
+                if (!p || !link.classList.contains("mf-topic")) return;
+                if (p.title) title.textContent = p.title;
+                if (p.description) {
+                    desc.classList.remove("mf-extlink-path");
+                    desc.dir = "auto";
+                    desc.textContent = p.description;
+                }
+                meta.textContent = p.siteName ? `${p.siteName} · ${host}` : host;
+            });
+        }
+    }
+
     function restoreTopics(content) {
         for (const link of content.querySelectorAll("a.mf-topic:not(.mf-filebanner)")) {
             if (topicOriginals.has(link)) link.innerHTML = topicOriginals.get(link);
-            link.classList.remove("mf-topic");
+            link.classList.remove("mf-topic", "mf-extlink");
         }
     }
 
@@ -848,8 +921,12 @@
             inlineSpoilers(content);
             if (settings.fileBanners) decorateFiles(content);
             else restoreFiles(content);
-            if (settings.topics) decorateTopics(content);
-            else restoreTopics(content);
+            if (settings.topics) {
+                decorateTopics(content);
+                decorateLinks(content);
+            } else {
+                restoreTopics(content);
+            }
 
             const found = collect(content);
             for (const kind of Object.keys(found)) {
@@ -911,8 +988,8 @@
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">באנר לקבצים מצורפים בתוך הפוסט</span>
             <span class="mfs-desc">קישור לקובץ שהועלה לאתר מוצג כבאנר קטן עם סוג הקובץ, השם והגודל. לחיצה מורידה את הקובץ.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="fileBanners"></label>
-          <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">באנר לקישורים לנושאים ולפוסטים בפורום</span>
-            <span class="mfs-desc">קישור לנושא או לפוסט במתמחים שמופיע ככתובת ארוכה מוחלף בבאנר עם שם הנושא.</span></span>
+          <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">באנר לקישורים</span>
+            <span class="mfs-desc">קישור שמופיע ככתובת ארוכה מוחלף בבאנר: לנושא או לפוסט במתמחים - עם שם הנושא, ולאתר אחר - עם הסמל והשם של האתר.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="topics"></label>
         </section>
 
@@ -1498,6 +1575,29 @@ a.mf-topic.mf-filebanner:focus-visible {
 /* הנקודה בצד ימין של הגודל, צמודה ל-"ZIP" - הרווח בצד ימין */
 .mf-filebanner-size:not(:empty) {
   margin-right: 0.35em;
+}
+
+/* ---- באנר לקישור לאתר חיצוני ---- */
+
+.mf-topic-icon.mf-extlink-icon img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* הכתובת: שורה אחת מקוצרת, מיושרת לימין כמו שאר הבאנר */
+.mf-topic-desc.mf-extlink-path {
+  display: block;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mf-extlink-path:empty {
+  display: none;
 }
 
 /* ---- הודעת אישור בהעלאה ---- */
