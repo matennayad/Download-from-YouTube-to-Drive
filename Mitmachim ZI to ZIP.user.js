@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.4
+// @version     1.5
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -201,6 +201,8 @@
 
     const OPEN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zM5 5h6v2H5v12h12v-6h2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>`;
 
+    const EYE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5c-5 0-9.27 3.11-11 7.5C2.73 16.89 7 20 12 20s9.27-3.11 11-7.5C21.27 8.11 17 5 12 5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>`;
+
     const sizeCache = new Map();
     const topicCache = new Map();
     const postCache = new Map();
@@ -266,10 +268,14 @@
         return width > 0 && width < 40;
     }
 
+    // תמונה בתוך ספויילר (התיבה המוסתרת שלו) - מוצגת בקבוצה נפרדת, שנפתחת רק בלחיצה
+    const inSpoiler = (el) => !!el.closest('.collapse, [class*="spoiler" i]');
+
     function collect(content) {
         const files = new Map();
         const images = new Map();
         const links = new Map();
+        const spoilerImages = new Map();
 
         for (const link of content.querySelectorAll("a[href]")) {
             if (link.closest(".mf-panel")) continue;
@@ -282,7 +288,8 @@
             }
             if (link.querySelector("img")) continue;
             if (IMAGE_EXT.test(url.pathname)) {
-                if (!images.has(url.href)) images.set(url.href, nameFromUrl(url));
+                const group = inSpoiler(link) ? spoilerImages : images;
+                if (!group.has(url.href)) group.set(url.href, nameFromUrl(url));
                 continue;
             }
             if (isSiteHost(url.hostname)) continue;
@@ -297,10 +304,13 @@
             const wrapper = img.closest("a[href]");
             const full = wrapper && toUrl(wrapper.getAttribute("href"));
             const src = full && IMAGE_EXT.test(full.pathname) ? full : url;
-            if (!images.has(src.href)) images.set(src.href, nameFromUrl(src));
+            const group = inSpoiler(img) ? spoilerImages : images;
+            if (!group.has(src.href)) group.set(src.href, nameFromUrl(src));
         }
+        // תמונה שמופיעה גם בפוסט וגם בספויילר - מוצגת רק עם התמונות של הפוסט
+        for (const href of images.keys()) spoilerImages.delete(href);
 
-        return { files, images, links };
+        return { files, images, links, spoilerImages };
     }
 
     function stopSiteNavigation(el) {
@@ -551,7 +561,41 @@
         return card;
     }
 
-    function buildBody({ files, images, links }) {
+    function buildSpoilerImages(spoilerImages) {
+        const wrap = document.createElement("div");
+        wrap.className = "mf-section mf-spoiler-images";
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "mf-subtoggle";
+        toggle.innerHTML = EYE_ICON;
+        const label = document.createElement("span");
+        toggle.append(label);
+        const setLabel = (open) => {
+            label.textContent = open ? "הסתר תמונות מספויילרים" : `תמונות מספויילרים (${spoilerImages.size})`;
+            toggle.setAttribute("aria-expanded", String(open));
+        };
+        setLabel(false);
+
+        // התמונות נטענות רק כשפותחים, כמו הספויילר עצמו
+        let grid = null;
+        toggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!grid) {
+                grid = document.createElement("div");
+                grid.className = "mf-grid";
+                for (const [href, name] of spoilerImages) grid.appendChild(buildImageTile(href, name));
+                wrap.appendChild(grid);
+                setLabel(true);
+                return;
+            }
+            grid.hidden = !grid.hidden;
+            setLabel(!grid.hidden);
+        });
+        wrap.appendChild(toggle);
+        return wrap;
+    }
+
+    function buildBody({ files, images, links, spoilerImages }) {
         const panel = document.createElement("div");
         panel.className = "mf-body";
 
@@ -567,6 +611,7 @@
             for (const [href, name] of images) grid.appendChild(buildImageTile(href, name));
             panel.appendChild(section(images.size > 1 ? "תמונות" : "תמונה", images.size, grid));
         }
+        if (spoilerImages.size) panel.appendChild(buildSpoilerImages(spoilerImages));
         if (links.size) {
             const list = document.createElement("div");
             list.className = "mf-links";
@@ -585,7 +630,7 @@
         }
 
         // התוכן נבנה רק בלחיצה, כך שתמונות ותצוגות מקדימות לא נטענות סתם
-        const count = found.files.size + found.images.size + found.links.size;
+        const count = found.files.size + found.images.size + found.links.size + found.spoilerImages.size;
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mf-toggle";
@@ -959,14 +1004,15 @@
 
             const found = collect(content);
             for (const kind of Object.keys(found)) {
-                if (!settings[kind] || settings.display === "off") found[kind].clear();
+                const setting = kind === "spoilerImages" ? "images" : kind;
+                if (!settings[setting] || settings.display === "off") found[kind].clear();
             }
 
             const key = settings.display + "||" + Object.values(found).map((m) => [...m.keys()].join("|")).join("||");
             const existing = content.querySelector(":scope > .mf-panel");
             if (existing && existing.dataset.key === key) continue;
             existing?.remove();
-            if (!found.files.size && !found.images.size && !found.links.size) continue;
+            if (!found.files.size && !found.images.size && !found.links.size && !found.spoilerImages.size) continue;
 
             const panel = buildPanel(found);
             panel.dataset.key = key;
@@ -1678,6 +1724,51 @@ a.mf-topic.mf-filebanner:focus-visible {
 
 .mf-extlink-path:empty {
   display: none;
+}
+
+/* ---- תמונות מספויילרים ---- */
+/* באנר קטן מתחת לתמונות של הפוסט; התמונות שבתוך הספויילרים נפתחות רק בלחיצה עליו */
+
+.mf-subtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px 4px 12px;
+  border: 1px dashed rgba(13, 110, 253, 0.45);
+  border-radius: 999px;
+  background: rgba(13, 110, 253, 0.06);
+  color: #0b5ed7;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.mf-subtoggle:hover,
+.mf-subtoggle:focus-visible {
+  background: rgba(13, 110, 253, 0.14);
+  border-color: rgba(13, 110, 253, 0.7);
+  outline: none;
+}
+
+.mf-subtoggle[aria-expanded="true"] {
+  border-style: solid;
+  background: rgba(13, 110, 253, 0.12);
+}
+
+[data-bs-theme="dark"] .mf-subtoggle {
+  color: #6ea8fe;
+}
+
+.mf-subtoggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mf-spoiler-images .mf-grid {
+  margin-top: 8px;
 }
 
 /* ---- הודעת אישור בהעלאה ---- */
