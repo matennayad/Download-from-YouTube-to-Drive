@@ -1,10 +1,14 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.6
-// @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה
+// @version     1.7
+// @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה, וכוכביות בקישורים לדרייב, לג'מבו מייל ול-magicode
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
+// @match       https://drive.google.com/*
+// @match       https://jumbomail.me/*
+// @match       https://*.jumbomail.me/*
+// @match       https://send.magicode.me/*
 // @icon        data:image/png;base64,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
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
 // @downloadURL https://raw.githubusercontent.com/matennayad/Download-from-YouTube-to-Drive/main/Mitmachim%20ZI%20to%20ZIP.user.js
@@ -27,12 +31,141 @@
     const page = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
 
     // display: "button" - כפתור שפותח את התצוגה, "always" - תמיד פתוח, "off" - בלי תצוגה
-    const DEFAULTS = { display: "button", files: true, images: true, links: false, topics: true, fileBanners: true };
+    const DEFAULTS = { display: "button", files: true, images: true, links: false, topics: true, fileBanners: true, unbreakLinks: true, breakLinks: true };
 
     function loadSettings() {
         const stored = {};
         for (const [key, value] of Object.entries(DEFAULTS)) stored[key] = GM_getValue(key, value);
         return stored;
+    }
+
+    // =====================================================================
+    // כוכביות בקישורים
+    // =====================================================================
+
+    // כוכביות בקישורים: השרת של מתמחים לא שומר קישורים לדרייב, לג'מבו מייל ול-send.magicode.me,
+    // אז מכניסים לתוך הקישור רצף כוכביות - והוא נשמר כקישור "שבור".
+    // מי שבלי התוסף מוחק את הכוכביות מהכתובת בעצמו, ומי שעם התוסף מקבל את הקישור המתוקן.
+    const MfStars = (() => {
+        const HOSTS = /^(?:[\w-]+\.)*(?:drive\.google\.com|jumbomail\.me|send\.magicode\.me)$/i;
+        const MARKS = "*".repeat(10);
+        // רצף סימונים: כל רצף שיש בו כוכבית, או שניים ומעלה מ-# @ & ברצף (# בודד יכול להיות חלק מקישור תקין)
+        const MARK_RUN = /[*#@&]*\*[*#@&]*|[#@&]{2,}/g;
+        const URL_PARTS = /^(https?:\/\/)([^/?]*)(.*)$/i;
+        const HOST_WORD = "(?:[\\w-]+\\.)*(?:drive\\.google\\.com|jumbomail\\.me|send\\.magicode\\.me)";
+
+        // הכתובת בלי הסימונים, רק לאתרים שהשרת חוסם
+        function clean(href) {
+            const m = String(href).replace(/%2a/gi, "*").match(URL_PARTS);
+            if (!m) return href;
+            const host = m[2].replace(MARK_RUN, "");
+            if (!HOSTS.test(host)) return href;
+            const fixed = m[1] + host + m[3].replace(MARK_RUN, "");
+            return fixed === m[0] ? href : fixed;
+        }
+
+        const isBroken = (href) => clean(href) !== href;
+
+        // רצף כוכביות באמצע המזהה של הקובץ (הקטע הארוך ביותר בכתובת)
+        function breakUrl(href) {
+            const m = href.match(URL_PARTS);
+            if (!m || !HOSTS.test(m[2]) || /[*]/.test(m[3])) return href;
+            let best = null;
+            for (const part of m[3].matchAll(/[\w-]{4,}/g)) {
+                if (!best || part[0].length > best[0].length) best = part;
+            }
+            if (!best) return href;
+            const at = best.index + Math.floor(best[0].length / 2);
+            return m[1] + m[2] + m[3].slice(0, at) + MARKS + m[3].slice(at);
+        }
+
+        // שובר את כל הקישורים לאתרים החסומים בטקסט של הפוסט (Markdown)
+        const URL_IN_TEXT = new RegExp(`(?:https?:\\/\\/)?${HOST_WORD}\\/[^\\s<>()\\[\\]"'\`]*`, "gi");
+
+        function breakText(text) {
+            return String(text).replace(URL_IN_TEXT, (url, offset, all) => {
+                // תווים שנחשבים לסוף משפט ולא לחלק מהקישור
+                const tail = (url.match(/[.,;:!?]+$/) || [""])[0];
+                const body = tail ? url.slice(0, -tail.length) : url;
+                const before = all[offset - 1] || "";
+                if (before && /[\w./@-]/.test(before)) return url;
+                const full = /^https?:/i.test(body) ? body : "https://" + body;
+                const broken = breakUrl(full);
+                if (broken === full) return url;
+
+                // [טקסט](כתובת) או <כתובת> - הכוכביות בתוך הכתובת לא נחשבות להדגשה
+                if ((before === "(" && all[offset - 2] === "]") || (before === "<" && all[offset + body.length] === ">")) {
+                    return (full === body ? broken : broken.replace(/^https:\/\//, "")) + tail;
+                }
+                // בתוך הטקסט של קישור - כוכביות עם \ לפניהן, כדי שיוצגו כמו שהן
+                if (before === "[") return broken.replace(/\*/g, "\\*") + tail;
+                // כתובת חופשית - עוטפים ב-<> כדי ששני קישורים באותו פוסט לא יהפכו את מה שביניהם להדגשה
+                return `<${broken}>${tail}`;
+            });
+        }
+
+        // כתובות שבורות בתוך טקסט שמוצג על המסך
+        const BROKEN_IN_TEXT = new RegExp(`(?:https?:\\/\\/)?${HOST_WORD}[^\\s<>"']*`, "gi");
+
+        function cleanText(text) {
+            return String(text).replace(BROKEN_IN_TEXT, (url) => {
+                if (!/[*#@&]/.test(url)) return url;
+                const full = /^https?:/i.test(url) ? url : "https://" + url;
+                const fixed = clean(full);
+                return full === url ? fixed : fixed.replace(/^https:\/\//, "");
+            });
+        }
+
+        // קישור בדף: הכתובת והטקסט שלו בלי הסימונים. מחזיר true אם הקישור שונה
+        const originals = new WeakMap();
+        const SELECTOR = 'a[href*="drive.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
+
+        function fixLink(link) {
+            if (originals.has(link)) return false;
+            const raw = link.getAttribute("href");
+            if (!raw || !isBroken(raw)) return false;
+            originals.set(link, { href: raw, html: link.innerHTML });
+            link.setAttribute("href", clean(raw));
+            link.title = link.title || "הקישור תוקן אוטומטית (הוסרו הכוכביות)";
+            const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+                const node = walker.currentNode;
+                const fixed = cleanText(node.nodeValue);
+                if (fixed !== node.nodeValue) node.nodeValue = fixed;
+            }
+            return true;
+        }
+
+        function restoreLink(link) {
+            const orig = originals.get(link);
+            if (!orig) return false;
+            originals.delete(link);
+            link.setAttribute("href", orig.href);
+            link.innerHTML = orig.html;
+            if (link.title === "הקישור תוקן אוטומטית (הוסרו הכוכביות)") link.removeAttribute("title");
+            return true;
+        }
+
+        function fixAll(root = document) {
+            for (const link of root.querySelectorAll(SELECTOR)) fixLink(link);
+        }
+
+        function restoreAll(root = document) {
+            for (const link of root.querySelectorAll(SELECTOR)) restoreLink(link);
+        }
+
+        const isOriginalLink = (link) => originals.has(link);
+        const originalHtml = (link) => originals.get(link)?.html;
+
+        return { HOSTS, SELECTOR, clean, isBroken, breakUrl, breakText, cleanText, fixLink, restoreLink, fixAll, restoreAll, isOriginalLink, originalHtml };
+    })();
+
+    // דף שנפתח מקישור שבור (בדרייב, בג'מבו מייל או ב-magicode) - עוברים מיד לכתובת בלי הכוכביות.
+    // באתרים האלה הסקריפט לא עושה שום דבר אחר
+    if (!/(^|\.)mitmachim\.top$/i.test(location.hostname)) {
+        const fixed = MfStars.clean(location.href);
+        if (fixed !== location.href && GM_getValue("unbreakLinks", true)) location.replace(fixed);
+        return;
     }
 
     // =====================================================================
@@ -57,11 +190,16 @@
 
     // הודעה קטנה שמאשרת שהקובץ תוקן
     function notify(names) {
-        if (!names.length || !document.body) return;
+        if (!names.length) return;
         console.info("[תיקון ZI ל-ZIP] הקבצים הועלו בתור:", names.join(", "));
+        showToast(`✓ הועלה בתור: ${names.join(", ")}`);
+    }
+
+    function showToast(text) {
+        if (!document.body) return;
         const toast = document.createElement("div");
         toast.className = "mf-toast";
-        toast.textContent = `✓ הועלה בתור: ${names.join(", ")}`;
+        toast.textContent = text;
         toast.dir = "rtl";
         document.body.appendChild(toast);
         setTimeout(() => { toast.style.opacity = "0"; }, 3500);
@@ -95,9 +233,36 @@
     }, true);
 
     // גרירה, הדבקה וכל העלאה אחרת - מתקנים ברגע השליחה
+    // קישור לדרייב, לג'מבו מייל או ל-send.magicode.me נשלח לשרת עם כוכביות, כי השרת לא שומר אותם כמו שהם
+    const POST_API = /\/api\/v3\/(topics|posts|chats)\b/;
+
+    function breakLinks(url, body) {
+        if (typeof body !== "string" || !settings.breakLinks || !POST_API.test(String(url))) return body;
+        let data;
+        try { data = JSON.parse(body); } catch (e) { return body; }
+        if (!data || typeof data !== "object") return body;
+        let changed = false;
+        for (const key of ["content", "message"]) {
+            if (typeof data[key] !== "string") continue;
+            const broken = MfStars.breakText(data[key]);
+            if (broken !== data[key]) { data[key] = broken; changed = true; }
+        }
+        if (!changed) return body;
+        console.info("[תיקון ZI ל-ZIP] נוספו כוכביות לקישורים, כדי שהשרת ישמור אותם");
+        showToast("✓ הקישור נשמר עם כוכביות - מי שיש לו את הסקריפט יקבל אותו מתוקן");
+        return JSON.stringify(data);
+    }
+
+    const origOpen = page.XMLHttpRequest.prototype.open;
+    page.XMLHttpRequest.prototype.open = function (method, url) {
+        this.__mfUrl = url;
+        return origOpen.apply(this, arguments);
+    };
+
     const origSend = page.XMLHttpRequest.prototype.send;
     page.XMLHttpRequest.prototype.send = function (body) {
         if (body instanceof page.FormData) body = fixFormData(body);
+        else body = breakLinks(this.__mfUrl, body);
         return origSend.call(this, body);
     };
 
@@ -105,6 +270,9 @@
     page.fetch = function (input, init) {
         if (init && init.body instanceof page.FormData) {
             init = { ...init, body: fixFormData(init.body) };
+        } else if (init && typeof init.body === "string") {
+            const body = breakLinks(typeof input === "string" ? input : input?.url || String(input), init.body);
+            if (body !== init.body) init = { ...init, body };
         }
         return origFetch.call(this, input, init);
     };
@@ -987,7 +1155,30 @@
         }
     }
 
+    // קישור שנשמר עם כוכביות מקבל את הכתובת המתוקנת, וכך גם הבאנר שלו מוצג בלי הכוכביות
+    function fixStars() {
+        for (const link of document.querySelectorAll(MfStars.SELECTOR)) {
+            if (MfStars.isOriginalLink(link) || !MfStars.isBroken(link.getAttribute("href") || "")) continue;
+            // באנר שנבנה לפני התיקון - בונים אותו מחדש מהכתובת המתוקנת
+            if (link.classList.contains("mf-topic") && topicOriginals.has(link)) {
+                link.innerHTML = topicOriginals.get(link);
+                link.classList.remove("mf-topic", "mf-extlink");
+            }
+            MfStars.fixLink(link);
+        }
+    }
+
+    function restoreStars() {
+        for (const link of document.querySelectorAll(MfStars.SELECTOR)) {
+            if (!MfStars.isOriginalLink(link)) continue;
+            link.classList.remove("mf-topic", "mf-extlink");
+            MfStars.restoreLink(link);
+        }
+    }
+
     function scan() {
+        if (settings.unbreakLinks) fixStars();
+        else restoreStars();
         for (const content of document.querySelectorAll('[component="post/content"]')) {
             inlineSpoilers(content);
             if (settings.fileBanners) decorateFiles(content);
@@ -1063,6 +1254,15 @@
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">באנר לקישורים</span>
             <span class="mfs-desc">קישור שמופיע ככתובת ארוכה מוחלף בבאנר: לנושא או לפוסט במתמחים - עם שם הנושא, ולאתר אחר - עם הסמל והשם של האתר.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="topics"></label>
+        </section>
+
+        <section class="mfs-card">
+          <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הסרת כוכביות מקישורים</span>
+            <span class="mfs-desc">קישור לדרייב, לג'מבו מייל או ל-send.magicode.me שנשמר באתר עם כוכביות (* # @ &amp;) מוצג ונפתח בלי הכוכביות. גם דף שגיאה שנפתח מקישור כזה עובר מיד לקובץ האמיתי.</span></span>
+            <input type="checkbox" class="mfs-switch" data-key="unbreakLinks"></label>
+          <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הוספת כוכביות בשליחת פוסט</span>
+            <span class="mfs-desc">השרת לא שומר קישורים לאתרים האלה, אז מדביקים קישור רגיל והסקריפט מכניס לתוכו כוכביות ברגע השליחה. מי שאין לו את הסקריפט רואה את הכוכביות ומוחק אותן מהכתובת בעצמו.</span></span>
+            <input type="checkbox" class="mfs-switch" data-key="breakLinks"></label>
         </section>
 
         <section class="mfs-card mfs-info">
