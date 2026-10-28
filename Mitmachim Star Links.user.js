@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        מסיר ומוסיף כוכב*ות - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.0
+// @version     1.1
 // @description מוסיף כוכביות לקישורים לדרייב, לג'מבו מייל ול-send.magicode.me בשליחת פוסט במתמחים טופ, ומסיר אותן בקריאה ובלחיצה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -111,7 +111,9 @@
             });
         }
 
-        // קישור בדף: הכתובת והטקסט שלו בלי הסימונים. מחזיר true אם הקישור שונה
+        // קישור בדף: רק הטקסט שלו מוצג בלי הסימונים. הכתובת עצמה נשארת שבורה, כדי שבמתמחים לא יהיה
+        // סימן לקישור המלא - הלחיצה עוברת לקישור השבור, ורק שם הוא מתקן את עצמו.
+        // מחזיר true אם הקישור שונה
         const originals = new WeakMap();
         const SELECTOR = 'a[href*="drive.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
 
@@ -119,9 +121,7 @@
             if (originals.has(link)) return false;
             const raw = link.getAttribute("href");
             if (!raw || !isBroken(raw)) return false;
-            originals.set(link, { href: raw, html: link.innerHTML });
-            link.setAttribute("href", clean(raw));
-            link.title = link.title || "הקישור תוקן אוטומטית (הוסרו הכוכביות)";
+            originals.set(link, { html: link.innerHTML });
             const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
             while (walker.nextNode()) {
                 const node = walker.currentNode;
@@ -135,9 +135,7 @@
             const orig = originals.get(link);
             if (!orig) return false;
             originals.delete(link);
-            link.setAttribute("href", orig.href);
             link.innerHTML = orig.html;
-            if (link.title === "הקישור תוקן אוטומטית (הוסרו הכוכביות)") link.removeAttribute("title");
             return true;
         }
 
@@ -242,7 +240,7 @@
 
         <section class="mfs-card">
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הסרת כוכביות מקישורים</span>
-            <span class="mfs-desc">קישור שנשמר באתר עם כוכביות (* # @ &amp;) מוצג ונפתח בלי הכוכביות. גם דף שגיאה שנפתח מקישור כזה עובר מיד לקובץ האמיתי.</span></span>
+            <span class="mfs-desc">קישור שנשמר באתר עם כוכביות (* # @ &amp;) מוצג בלי הכוכביות, אבל במתמחים הכתובת שלו נשארת שבורה. בלחיצה עוברים לקישור השבור, ושם הוא מתקן את עצמו ועובר לקובץ האמיתי.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="unbreakLinks"></label>
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הוספת כוכביות בשליחת פוסט</span>
             <span class="mfs-desc">השרת לא שומר קישורים לאתרים האלה, אז מדביקים קישור רגיל והסקריפט מכניס לתוכו כוכביות ברגע השליחה. מי שאין לו את הסקריפט רואה את הכוכביות ומוחק אותן מהכתובת בעצמו.</span></span>

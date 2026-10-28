@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.7
+// @version     1.8
 // @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה, וכוכביות בקישורים לדרייב, לג'מבו מייל ול-magicode
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
@@ -116,7 +116,9 @@
             });
         }
 
-        // קישור בדף: הכתובת והטקסט שלו בלי הסימונים. מחזיר true אם הקישור שונה
+        // קישור בדף: רק הטקסט שלו מוצג בלי הסימונים. הכתובת עצמה נשארת שבורה, כדי שבמתמחים לא יהיה
+        // סימן לקישור המלא - הלחיצה עוברת לקישור השבור, ורק שם הוא מתקן את עצמו.
+        // מחזיר true אם הקישור שונה
         const originals = new WeakMap();
         const SELECTOR = 'a[href*="drive.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
 
@@ -124,9 +126,7 @@
             if (originals.has(link)) return false;
             const raw = link.getAttribute("href");
             if (!raw || !isBroken(raw)) return false;
-            originals.set(link, { href: raw, html: link.innerHTML });
-            link.setAttribute("href", clean(raw));
-            link.title = link.title || "הקישור תוקן אוטומטית (הוסרו הכוכביות)";
+            originals.set(link, { html: link.innerHTML });
             const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
             while (walker.nextNode()) {
                 const node = walker.currentNode;
@@ -140,9 +140,7 @@
             const orig = originals.get(link);
             if (!orig) return false;
             originals.delete(link);
-            link.setAttribute("href", orig.href);
             link.innerHTML = orig.html;
-            if (link.title === "הקישור תוקן אוטומטית (הוסרו הכוכביות)") link.removeAttribute("title");
             return true;
         }
 
@@ -659,7 +657,8 @@
     }
 
     function buildLinkCard(href, text) {
-        const url = new URL(href);
+        // הכתובת שמוצגת - בלי הכוכביות; הלחיצה עוברת לכתובת המקורית
+        const url = new URL(settings.unbreakLinks ? MfStars.clean(href) : href);
         const card = document.createElement("a");
         card.className = "mf-link";
         card.href = href;
@@ -713,7 +712,7 @@
         row.append(icon, body, arrow);
         card.append(media, row);
 
-        getPreview(href).then((p) => {
+        getPreview(url.href).then((p) => {
             if (!p) return;
             if (p.title) {
                 // הכותרת של הדף מחליפה את שם האתר - אז שם האתר עובר לשורת הכתובת
@@ -958,6 +957,8 @@
             if (link.closest(".mf-panel") || link.querySelector("img")) continue;
             const url = toUrl(link.getAttribute("href"));
             if (!url || isSiteHost(url.hostname) || IMAGE_EXT.test(url.pathname) || !isBareExternal(link, url)) continue;
+            // הבאנר מציג את הכתובת בלי הכוכביות, אבל הלחיצה עוברת לכתובת המקורית
+            const shown = (settings.unbreakLinks && toUrl(MfStars.clean(url.href))) || url;
 
             topicOriginals.set(link, link.innerHTML);
             link.classList.add("mf-topic", "mf-extlink");
@@ -973,11 +974,11 @@
             favicon.loading = "lazy";
             favicon.referrerPolicy = "no-referrer";
             favicon.addEventListener("error", () => { icon.innerHTML = GLOBE_ICON; });
-            favicon.src = `${url.origin}/favicon.ico`;
+            favicon.src = `${shown.origin}/favicon.ico`;
             icon.appendChild(favicon);
 
-            const host = url.hostname.replace(/^www\./, "");
-            let path = url.pathname + url.search;
+            const host = shown.hostname.replace(/^www\./, "");
+            let path = shown.pathname + shown.search;
             try { path = decodeURIComponent(path); } catch (e) {}
             if (path === "/") path = "";
 
@@ -1000,7 +1001,7 @@
 
             // עם תצוגה מקדימה פעילה - הכותרת והתיאור האמיתיים של הדף
             if (!settings.links) continue;
-            getPreview(url.href).then((p) => {
+            getPreview(shown.href).then((p) => {
                 if (!p || !link.classList.contains("mf-topic")) return;
                 if (p.title) title.textContent = p.title;
                 if (p.description) {
@@ -1258,7 +1259,7 @@
 
         <section class="mfs-card">
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הסרת כוכביות מקישורים</span>
-            <span class="mfs-desc">קישור לדרייב, לג'מבו מייל או ל-send.magicode.me שנשמר באתר עם כוכביות (* # @ &amp;) מוצג ונפתח בלי הכוכביות. גם דף שגיאה שנפתח מקישור כזה עובר מיד לקובץ האמיתי.</span></span>
+            <span class="mfs-desc">קישור לדרייב, לג'מבו מייל או ל-send.magicode.me שנשמר באתר עם כוכביות (* # @ &amp;) מוצג בלי הכוכביות, אבל במתמחים הכתובת שלו נשארת שבורה. בלחיצה עוברים לקישור השבור, ושם הוא מתקן את עצמו ועובר לקובץ האמיתי.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="unbreakLinks"></label>
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הוספת כוכביות בשליחת פוסט</span>
             <span class="mfs-desc">השרת לא שומר קישורים לאתרים האלה, אז מדביקים קישור רגיל והסקריפט מכניס לתוכו כוכביות ברגע השליחה. מי שאין לו את הסקריפט רואה את הכוכביות ומוחק אותן מהכתובת בעצמו.</span></span>
