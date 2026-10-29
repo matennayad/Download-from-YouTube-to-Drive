@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        הורדה לדרייב-יוטיוב מאת מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     5.1
+// @version     5.2
 // @description כפתור הורדה ישירה לדרייב - סרטון בודד או ערוץ שלם, עם אימות מכשיר וחוויית משתמש משופרת
 // @match       *://*.youtube.com/*
 // @homepageURL https://github.com/matennayad/Download-from-YouTube-to-Drive
@@ -64,6 +64,7 @@
                 const current = document.getElementById('drive-download-container');
                 if (!current) return;
                 if (getFullscreenElement()) return; // חזרו למסך מלא בינתיים
+                if (isHiddenByUser()) return; // המשתמש הסתיר את הבאנר
                 current.style.display = 'flex';
             }, FULLSCREEN_RETURN_DELAY_MS);
         }
@@ -73,8 +74,73 @@
     // ומחזיר אותו למסך. הפונקציה הזאת מחזירה את ההסתרה אחרי כל יצירה.
     function ensureFullscreenVisibility() {
         const container = document.getElementById('drive-download-container');
-        if (container && getFullscreenElement()) {
+        if (container && (getFullscreenElement() || isHiddenByUser())) {
             container.style.display = 'none';
+        }
+    }
+
+    // ============================================================
+    // הסתרה ידנית ("הסתרה" בפינת הכפתור)
+    // ============================================================
+    // הבאנר מכסה חלק מהסרטון. לחיצה על העיגול מורידה אותו מהמסך
+    // באנימציה, עד שעוברים לסרטון אחר - אז הוא חוזר לבד.
+
+    const HIDE_ANIMATION_MS = 450;
+
+    // הכתובת שבה המשתמש הסתיר את הבאנר; ריק = גלוי
+    let hiddenOnUrl = '';
+
+    function isHiddenByUser() {
+        return hiddenOnUrl !== '' && hiddenOnUrl === location.href;
+    }
+
+    function hideMenuAnimated() {
+        const container = document.getElementById('drive-download-container');
+        if (!container) return;
+
+        hiddenOnUrl = location.href;
+
+        container.style.transition =
+            'transform ' + HIDE_ANIMATION_MS + 'ms cubic-bezier(0.55, 0, 0.75, 0.3), ' +
+            'opacity ' + HIDE_ANIMATION_MS + 'ms ease-in';
+        container.style.transform = 'translateY(160%) scale(0.7) rotate(-6deg)';
+        container.style.opacity = '0';
+
+        setTimeout(function () {
+            if (!isHiddenByUser()) return; // כבר חזר בינתיים
+            container.style.display = 'none';
+        }, HIDE_ANIMATION_MS);
+    }
+
+    function showMenuAnimated() {
+        const container = document.getElementById('drive-download-container');
+        if (!container) return;
+
+        hiddenOnUrl = '';
+
+        if (getFullscreenElement()) return; // יחזור ביציאה ממסך מלא
+
+        // מתחילים מתחת למסך ועולים למקום
+        container.style.transition = 'none';
+        container.style.transform = 'translateY(160%) scale(0.7)';
+        container.style.opacity = '0';
+        container.style.display = 'flex';
+
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                container.style.transition =
+                    'transform ' + HIDE_ANIMATION_MS + 'ms cubic-bezier(0.25, 1.3, 0.5, 1), ' +
+                    'opacity ' + HIDE_ANIMATION_MS + 'ms ease-out';
+                container.style.transform = 'none';
+                container.style.opacity = '1';
+            });
+        });
+    }
+
+    // ניווט לסרטון אחר (יוטיוב הוא SPA) מחזיר באנר שהוסתר
+    function restoreIfNavigated() {
+        if (hiddenOnUrl && hiddenOnUrl !== location.href) {
+            showMenuAnimated();
         }
     }
 
@@ -393,9 +459,48 @@
         });
         statusDiv.innerText = '⏳ ההורדה מתבצעת - נא להמתין';
 
+        // עיגול "הסתרה" בפינה הימנית התחתונה של כפתור ההורדה
+        const mainWrap = document.createElement('div');
+        Object.assign(mainWrap.style, {
+            position: 'relative', display: 'inline-block', lineHeight: '0'
+        });
+
+        const hideBadge = document.createElement('div');
+        hideBadge.id = 'drive-hide-badge';
+        hideBadge.innerText = 'הסתרה';
+        hideBadge.title = 'הסתרת הכפתור עד המעבר לסרטון אחר';
+        Object.assign(hideBadge.style, {
+            position: 'absolute', right: '-8px', bottom: '-8px',
+            width: '38px', height: '38px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: '#ffffff', color: '#C53030',
+            border: '2px solid #C53030',
+            fontSize: '10px', fontWeight: 'bold', fontFamily: 'Arial, sans-serif',
+            lineHeight: '1', cursor: 'pointer', userSelect: 'none',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+            transition: 'transform 0.2s, background-color 0.2s, color 0.2s'
+        });
+        hideBadge.onmouseenter = () => {
+            hideBadge.style.transform = 'scale(1.12)';
+            hideBadge.style.backgroundColor = '#C53030';
+            hideBadge.style.color = '#ffffff';
+        };
+        hideBadge.onmouseleave = () => {
+            hideBadge.style.transform = 'scale(1)';
+            hideBadge.style.backgroundColor = '#ffffff';
+            hideBadge.style.color = '#C53030';
+        };
+        hideBadge.onclick = (e) => {
+            e.stopPropagation(); // לא לפתוח את תפריט ההורדה
+            hideMenuAnimated();
+        };
+
+        mainWrap.appendChild(mainBtn);
+        mainWrap.appendChild(hideBadge);
+
         container.appendChild(optionsDiv);
         container.appendChild(statusDiv);
-        container.appendChild(mainBtn);
+        container.appendChild(mainWrap);
         document.body.appendChild(container);
 
         ensureFullscreenVisibility();
@@ -1456,6 +1561,9 @@
     // הבדיקה התקופתית מחזירה אותו, ומוודאת שהוא נשאר מוסתר במסך מלא.
     setInterval(function () {
         createFloatingMenu();
+        restoreIfNavigated();
         ensureFullscreenVisibility();
     }, 3000);
+
+    window.addEventListener('yt-navigate-finish', restoreIfNavigated);
 })();
