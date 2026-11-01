@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ג'מבו מייל לדרייב
 // @namespace    https://mitmachim.top/user/מטען-נייד
-// @version      1.1.1
+// @version      1.3.0
 // @description  הורדות מג'מבו מייל עוברות ישירות לגוגל דרייב, בלי להישמר במחשב.
 // @author       מטען נייד
 // @match        https://*.jumbomail.me/*
@@ -9,7 +9,7 @@
 // @match        https://*.jumbomail.co.il/*
 // @match        https://jumbomail.co.il/*
 // @match        https://developers.google.com/oauthplayground*
-// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAALRlWElmSUkqAAgAAAAGABIBAwABAAAAAQAAABoBBQABAAAAVgAAABsBBQABAAAAXgAAACgBAwABAAAAAgAAABMCAwABAAAAAQAAAGmHBAABAAAAZgAAAAAAAABIAAAAAQAAAEgAAAABAAAABgAAkAcABAAAADAyMTABkQcABAAAAAECAwAAoAcABAAAADAxMDABoAMAAQAAAP//AAACoAQAAQAAADAAAAADoAQAAQAAADAAAAAAAAAADYNOUQAAA6dJREFUeJztlU1sDGEYx/cgRVyQOEgkThL1FRKiER+H+lYkvhoSF2KXUlq1X92ZnZ2dbrc778y2TTe6O8VqDyX0IFxcSiKCEC5EiLvdftJWu6vT9pVhZ/eZ0VnkPbAyh9/lfd7D/7fv/9mxFDlsCRLWCDQm4UhHa4IEiykgmAIJU6CokAXmOc/05Qt4wO8Z8YSCKSMcPgaTEAiLKRIst5sj40bhN3rtQ+PXbuF8vLroJ+J+LUeE5V20fdJIoJyjv5gCF00BnFfgYUSSjQR2+tzD/7zA4trKASOB2Q5bsp7nU48ikmxEp9uHSWjngjIJhf8dKDIF6L8rUBIJYhJsN9AUCWVtIibBFLD9bYGzARaT4Oa5KRKqgxwmwfK0wolJiB61E3H3ZDURpkDUFKg2BXBBC5QU+negxBRApkCZKRApYIHStnCChGJEYRJm2K0fSTAFik0BqymQ+G8EapqELyJCaVejMGptEYb3RsX+UknUBN4RE3srm4URlfWhXJgNDRTeF6CzLOdzszUhCh+ro3EV68UnOC/e1EDhYt5YYLmnanAtXfPZiKWeqsH5zoo+jcA9jp94xvAYEkYoXSqJSfXOnpjYB+en/d5syM0NFH5b489SXkd/D6ncgecqd1wsVkJMJ/BB6piU4134V2QFtkpiEiGUvlGP5Cc+fgqGtLUIw/AF4MzlY3KV4Cl818VmA95ys3h/gJ42vMqb2PWJmXZrQi8wcPXm1B8JQPZExX4YsjWEvqqzbZLYA2d+BgigHxWCAV/Y/TjkZfCqTJ1W8BQOeJnsXI534VLGOaQXgCG7I5I8x3G6R2Wh62x/Z1PLV0MBhQds7hWUV/mtF8i8wjN7TqDbyX4/M7ojx7twLNyUhuGL7NYEFFDC6gWVHcgr8BjUqCOIxtXzXbodOM96fwr3Eghc0gtmEGhfVuBtrH0ChptltyWhQGu4USOosKT2Qh4BSUzAkDFQoTJdvU6BJVZYG9Iu8q56eloBp+9HjeR4F05e6ZyE4ZSaQIEGhFJ6gZWe6k+GAspCw5BNPEqrs/1RcQDOjtdpBQ7pdmC1vj4ZKCYn8D7WoRGY6zjTCwU8oeCYXmAdXfPZUGC7blFDAkqps4Ot4iCcHQ5of2EeLKjS85/6n6HNk6tQvLFZ0/EFzoo+KFAZ5Eb1AlsYx5ChwE7dovpFYUydlV8WP8GZ8q8D+/8c9F+RmS78Mp7Cry/lltgaYDUBF7nO9UOBY5x3RC+w2+ceVgS+AVPPffeh8cMkAAAAAElFTkSuQmCC
+// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAIiUlEQVR4nM2abYycVRXHf+fe55mXfZvd7XalsEDDawsWSEuLNCpQBGkKAYqtIG0CiUahxH4gGlKCsAbWYIJKSUNN+sEgaUwL+gENNhYVY8QqCBRthbTRCqXQ0n2Z3ZlnZp7n3uOHZ3fb7W6XhTJL/8mdnWTuzP7/95x7nnPOvcLR2LLCsnKrA2h58J5FouZ2lKtQfxbQiDJdUEVKGPaAeQGT/KLYveFlAFassGxNOQLIseQL9911FmHYA9wsYZDRxIH3oNPHPmUmYA1iLRonNcRsoTT0vYHHNv3n6IVOBTx4RUD3i0nzuruW2SDzFJmwXaMKKA7UICKT/rN6QdWDKIKVfA6txb0+qa4a7Nn4/IgIGTFJ87p7lpoweA5VS5wkGAk+FdLHg9eEMAgQcRrHy4o9G7axYoUVVKXtobWnO89OEQokziFiP22+E0LVEVirSr/xySX9wcy3DSLqYveYyWYKxC45ackDiFhil5hcplVVHqW720th3Zr5GPs31AtgPi1uVgwjO00B5/1k0z0iHu8vCxBzp2QCq9Wam+wb9YIAIkKxGpE4BygilpZcDiOCnzj6qWTCQKvxnYHil+AcqB5ZgnqTFsGIIEDsHOValS+dO5erz72ATBDwl//u4df/eh0FskEwXoSq0cSh+CVSuH9NGTH56Yrz1hhqSUI5rgGQD0OevGU1qxdcPmbei3vfZNXmTfSVS2QmEiEC6iMDMn3kxVCsRLTmG1hx8aV8fvY5PLJ0OasXXE7i/eiIneOKs89n08o7SLxHmMAzVAHJT1usz1hLX1TmujnzePKWVXQV2kY/c+oJzNj4kXjPl8+/kAWnz+av+/Yyo6GJmkvG/e60RB1rDIeGBjm1pZWnv/Z1ugptJN6jqiiKlfE0BFBVls75LFkb0BuVMBPs0boLsGIYiMrcNG8+2791L4VcHq9KYNIMZUL3IBUNsO7qZez67sOsWXwVQ9XKuKymri5kxVCsRiydM49f3bEGAK864UpOBBmOVLPbZ/D4TbcR2oAfvbiNtobG0edEXS3gUUJj6b7uJiANmUYA9aBpzJ8KnPd4VR645nq6WtuoJsmo5eomQESoJjFnts/ggs5OVD2BtYCAGJDh91PAiDsVcnkumtVFFNcwJv1uXV3IiDBUcwy5HLkQVBNI+qH6HpTfgrAD2r6YhsQpulXs/Jh9UEcBimLpCIrI+0+hQQmit1MBvgJxL3rqN1Ly6pnMGRL1hMZyoNjPq/v30RBmpmEPKFiBgxXDK2+9gAy9hFbfA03A5CBsR5rPSzeqsenf44zQpAnyvc9t4XC5RGiPJMx1s4ACgYG+Glz/+1beuDnmvFaPS8BqAqaBgbgRr2UEZaL9oEDiHLsPHuCxP27jN7t3Usjlx2SqdRMgwyNK4PvzY2a3OHwC1oAXYW+/55pnHx+de7x45NVzcGiQxHkKuQacjk2zP5aAkRQYGH6ajv/cCPRW4OEFjvsXOXwVjIF3SkJXh/JGn7Kvb5CWLLhJo6nQEGaQjExYI3zkPWCMwXlPqVqlVKviVDFHpQLjyC90VCMwWfjxPy3zfxmy633h7ZKABGRsQDjpsHjV4xY4U7LAqHeKMBhFdDQ3M29mJ94rew+9T3+5RFM2h6qOI1+pQC4P61+13Pt3S0bgxm0hrVklHyiJnljHZlIBclTRYY2hUquxfMEiVi/+Am2NTQAcLA6w6U9/YPuunTRnsxyOdELya3dY2rLpYhyowP5IyNoTbzcdV4ARoZokJM7R2VLg8NAgN1yygPuW3chgpUIljgGY2dzCQzd+Be8TfvvaLh5ZHLLuUkd1AvKq4IFwuPr+JMqQCQVYY6jGMacUCnzzymu48NQu+solZja3UIwiEu9HE7JKHBMYYfllV7Gk6S2+szChWhKyeR1HfoSvjr7UQYA1hqhWIzCWh5ffypxZp1GMyrQ2NhI7hzuK/Mj8ShxzRnsb79oODn2wh5ntjax/LWTtDjOO/CeNMQKMCFGtxoymZu5eci2zOzr5YLCItRYXxzD8ZDwWitBglZazb+HNzL95bvdLrP1zhfYmi/fjw2xdBBgRKnHMmR0z+eHK2/lMSyvFqDycQfKhyVbslc91tePkSnLhRczdvZl9hw+RCcK6NoZHA7iSpl9rllzLrEIb/eXSaBo7FQgQxQmVyiBzO9u5e8m1x+vpfKIwkIbLWhJzRnsHc2edxmAlGpMwTRUigrUB/VHE3FmncUZ7B7UkrmtzOxVAWurlw8wRlzlBBNaSDzN41SmWLR8PBtJ8JrQB7w700VcqERjzsc0/UrD3lUq8O9BHaAO03ntAgdBa+kpDPPvKDlryDVhj8JrWolMfHmsMLfkGnn1lB32lIUJrpycKOe9pyuV45uUdZIOAry5aTHM+P2z+qThBGi4Ho4gntj/PMy/voCmX+7Au8wlDCvffM2aBBBiqVulqb+eczlOwxgy7wGQiFJE03d1z8D3e6e2lKZudljPBQJWyGGkYYalAcy7PoWKR/b29H4mEAJkgoDmXx2tdV14REfVaDoC9WDOPONGReOfVEwZB+hCarFw6lr2mjlRn8mnUCazg3d4AdLtYO0+TsXXRSN9yyiaYzlNYER0+ft1uxJmfay1OmGqX6eSAaDVOTGh/ZgYefeJVvHtG8jmD1/H965MNXhNpyBnUb+3vXr/z6GPW10VoPfmPWQOL6uGaq14chaccMKxcafq61/8P525FTDrhZLSE14QgsIg4TdxtUc9P97Nrlxi2bnVsWWGLPRu2+bhyA9ArjcMnN4qrax7wYVD16XUHGOZ0UOPKsuIPNvxu5IZBmi+vTEUM9mx8nlptodbizRhTk1zGEgQyXaeXYyACYWAkl7FYU9Va/LQZql1a7Nm4jS1HbqyMZXbUVZaWB769UIRVJ8N1GzGyeaD7J/84liPA/wGiMS+pbZsf4wAAAABJRU5ErkJggg==
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -21,6 +21,8 @@
 // @connect      www.googleapis.com
 // @connect      oauth2.googleapis.com
 // @connect      jumbomail.me
+// @connect      script.google.com
+// @connect      script.googleusercontent.com
 // @connect      *
 // @sandbox      JavaScript
 // @run-at       document-start
@@ -34,7 +36,7 @@
 (function () {
   'use strict';
 
-  const ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAALRlWElmSUkqAAgAAAAGABIBAwABAAAAAQAAABoBBQABAAAAVgAAABsBBQABAAAAXgAAACgBAwABAAAAAgAAABMCAwABAAAAAQAAAGmHBAABAAAAZgAAAAAAAABIAAAAAQAAAEgAAAABAAAABgAAkAcABAAAADAyMTABkQcABAAAAAECAwAAoAcABAAAADAxMDABoAMAAQAAAP//AAACoAQAAQAAADAAAAADoAQAAQAAADAAAAAAAAAADYNOUQAAA6dJREFUeJztlU1sDGEYx/cgRVyQOEgkThL1FRKiER+H+lYkvhoSF2KXUlq1X92ZnZ2dbrc778y2TTe6O8VqDyX0IFxcSiKCEC5EiLvdftJWu6vT9pVhZ/eZ0VnkPbAyh9/lfd7D/7fv/9mxFDlsCRLWCDQm4UhHa4IEiykgmAIJU6CokAXmOc/05Qt4wO8Z8YSCKSMcPgaTEAiLKRIst5sj40bhN3rtQ+PXbuF8vLroJ+J+LUeE5V20fdJIoJyjv5gCF00BnFfgYUSSjQR2+tzD/7zA4trKASOB2Q5bsp7nU48ikmxEp9uHSWjngjIJhf8dKDIF6L8rUBIJYhJsN9AUCWVtIibBFLD9bYGzARaT4Oa5KRKqgxwmwfK0wolJiB61E3H3ZDURpkDUFKg2BXBBC5QU+negxBRApkCZKRApYIHStnCChGJEYRJm2K0fSTAFik0BqymQ+G8EapqELyJCaVejMGptEYb3RsX+UknUBN4RE3srm4URlfWhXJgNDRTeF6CzLOdzszUhCh+ro3EV68UnOC/e1EDhYt5YYLmnanAtXfPZiKWeqsH5zoo+jcA9jp94xvAYEkYoXSqJSfXOnpjYB+en/d5syM0NFH5b489SXkd/D6ncgecqd1wsVkJMJ/BB6piU4134V2QFtkpiEiGUvlGP5Cc+fgqGtLUIw/AF4MzlY3KV4Cl818VmA95ys3h/gJ42vMqb2PWJmXZrQi8wcPXm1B8JQPZExX4YsjWEvqqzbZLYA2d+BgigHxWCAV/Y/TjkZfCqTJ1W8BQOeJnsXI534VLGOaQXgCG7I5I8x3G6R2Wh62x/Z1PLV0MBhQds7hWUV/mtF8i8wjN7TqDbyX4/M7ojx7twLNyUhuGL7NYEFFDC6gWVHcgr8BjUqCOIxtXzXbodOM96fwr3Eghc0gtmEGhfVuBtrH0ChptltyWhQGu4USOosKT2Qh4BSUzAkDFQoTJdvU6BJVZYG9Iu8q56eloBp+9HjeR4F05e6ZyE4ZSaQIEGhFJ6gZWe6k+GAspCw5BNPEqrs/1RcQDOjtdpBQ7pdmC1vj4ZKCYn8D7WoRGY6zjTCwU8oeCYXmAdXfPZUGC7blFDAkqps4Ot4iCcHQ5of2EeLKjS85/6n6HNk6tQvLFZ0/EFzoo+KFAZ5Eb1AlsYx5ChwE7dovpFYUydlV8WP8GZ8q8D+/8c9F+RmS78Mp7Cry/lltgaYDUBF7nO9UOBY5x3RC+w2+ceVgS+AVPPffeh8cMkAAAAAElFTkSuQmCC';
+  const ICON = 'data:image/png;base64,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';
   const DRIVE = 'https://www.googleapis.com/drive/v3';
   const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
   const SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -180,6 +182,27 @@
 
   const ON_PLAYGROUND = location.hostname === 'developers.google.com';
 
+  // ================= שרת ההעברה המשותף (דרך ממסר ב-Apps Script) =================
+  const SHARED_RELAY = 'https://script.google.com/macros/s/AKfycbxvcGUCcw7gTlzBv61frS0F31UT5ZgYIbqTflLzj8tWQlohJxWo6JkIRNZs_cKLVnuDFw/exec';
+  const useServer = () => S.get('useServer', false) === true;
+  async function relayCall(path, method = 'GET', body) {
+    const r = await gx({ method: 'POST', url: SHARED_RELAY, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, data: JSON.stringify({ path, method, body }) });
+    const wrap = json(r);
+    if (!wrap || typeof wrap.status !== 'number') throw new Error('הממסר לא ענה כמו שצריך.');
+    if (wrap.status >= 400) { const e = new Error(wrap.data?.error || `שגיאה ${wrap.status} מהשרת`); e.waking = !!wrap.data?.waking; throw e; }
+    return wrap.data;
+  }
+  const sleepMs = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  async function wakeServer(onWait) {
+    const until = Date.now() + 120000;
+    let first = true;
+    for (;;) {
+      try { const d = await relayCall('/health'); if (d && d.ok) return d; } catch (e) { if (Date.now() > until) throw new Error('השרת לא התעורר. נסו שוב בעוד דקה.'); }
+      if (first) { onWait?.(); first = false; }
+      await sleepMs(5000);
+    }
+  }
+
   // ======================================================================
   // ===================== OAuth Playground: עוזר ======================
   // ======================================================================
@@ -316,6 +339,8 @@
   const CSS = `
     :host { all: initial; }
     * { box-sizing: border-box; }
+    .credit { margin: 0; padding: 8px 16px 12px; font-size: 12px; color: #6B7A8C; text-align: center; border-top: 1px solid #E6EAF0; }
+    .credit a { color: #0F7B6C; font-weight: 600; }
     .win {
       position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 2147483647;
       width: min(460px, calc(100vw - 32px));
@@ -366,7 +391,9 @@
   );
   const win = el('div', { class: 'win', role: 'dialog', 'aria-label': 'הטוקן מוכן', hidden: true },
     head,
-    el('div', { class: 'body' }, desc, tokenView, el('div', { class: 'btns' }, copyBtn, saveBtn), msg)
+    el('div', { class: 'body' }, desc, tokenView, el('div', { class: 'btns' }, copyBtn, saveBtn), msg),
+    el('p', { class: 'credit' }, 'פותח על ידי מטען נייד. לפרופיל שלי במתמחים טופ לחצו ',
+      el('a', { href: 'https://mitmachim.top/user/%D7%9E%D7%98%D7%A2%D7%9F-%D7%A0%D7%99%D7%99%D7%93', target: '_blank', rel: 'noopener', text: 'כאן' }))
   );
   root.append(win);
   document.documentElement.append(host);
@@ -580,22 +607,26 @@
   // ======================= ג'מבו מייל: תפיסת הורדות =======================
   // ======================================================================
   const W = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
-  const isOn = () => S.get('autoJumbo', true) !== false;
+  const isOn = () => S.get('autoJumbo', false) === true;   // ברירת מחדל: כפתור ההורדה הרגיל מוריד למחשב
+  // כפתורי "לדרייב": ההורדות של הדקה הקרובה עוברות לדרייב
+  let armedUntil = 0, armedName = '';
+  const armedNow = () => Date.now() < armedUntil;
   const pendingStarts = [];   // הורדות שנתפסו לפני שהממשק נבנה
   let startJob = (src) => pendingStarts.push(src);
 
   // מתחילים לקרוא קובץ blob מיד, לפני שג'מבו מייל ימחק אותו
   function grab(url, name) {
+    if (!name && armedName) { name = armedName; armedName = ''; }
     if (/^blob:/i.test(url)) {
       const p = W.fetch(url).then((r) => r.blob());
       startJob({ kind: 'blob', url, name, blobPromise: p });
     } else {
-      startJob({ kind: 'url', url, name });
+      startJob({ kind: useServer() ? 'server' : 'url', url, name });
     }
   }
 
   function shouldTake(href, hasDownloadAttr) {
-    if (!href || !isOn()) return false;
+    if (!href || !(isOn() || armedNow())) return false;
     const isFile = /^blob:/i.test(href) || hasDownloadAttr ||
       (/jumbomail\.(me|co\.il)/i.test(href) && /download|getfile|\/files?\//i.test(href));
     if (!isFile) return false;
@@ -842,6 +873,23 @@
       details ol { padding-inline-start: 18px; margin: 6px 0 0; }
       details li { margin-bottom: 4px; }
       code { direction: ltr; unicode-bidi: embed; font: 11px Consolas, monospace; background: var(--soft); padding: 1px 4px; border-radius: 4px; }
+    .eye-wrap { position: relative; }
+    .eye-wrap input { width: 100%; box-sizing: border-box; padding-left: 64px; }
+    .eye { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); border: 0; background: var(--soft); color: var(--accent); font: 600 12px "Segoe UI", Arial, sans-serif; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+    @keyframes flashIn { 0% { box-shadow: 0 0 0 3px rgba(15,123,108,.6); background: #E3F2EE; } 100% { box-shadow: none; } }
+    input.flash { animation: flashIn 1.8s ease; }
+    .mode-line { margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .mode-line.srv { color: var(--accent); font-weight: 600; }
+    .dp-via { margin: 0; font-size: 12px; color: var(--muted); }
+    .dp-tools { display: flex; gap: 8px; align-items: center; }
+    .dp-tools input { flex: 1; }
+    .dp-all { white-space: nowrap; border: 1px solid var(--line); background: #fff; color: var(--accent); font: 600 13px "Segoe UI", Arial, sans-serif; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+    .dp-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--soft); cursor: zoom-in; display: block; }
+    .dp-prev { position: fixed; inset: 0; z-index: 2147483647; background: rgba(10,16,26,.8); display: grid; place-items: center; cursor: zoom-out; }
+    .dp-prev canvas, .dp-big-img { border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: none; transform: none; }
+    .dp-big { width: 60px; height: 60px; border-radius: 50%; border: 4px solid rgba(255,255,255,.3); border-top-color: #fff; animation: dpspin 1s linear infinite; }
+    @keyframes dpspin { to { transform: rotate(360deg); } }
+    .dp-prev .cap { position: fixed; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font: 14px "Segoe UI", Arial, sans-serif; }
     .dp-back { position: fixed; inset: 0; z-index: 2147483647; background: rgba(27,42,65,.35); display: grid; place-items: center; }
     .dp-back[hidden] { display: none; }
     .dp { width: min(560px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 60px)); display: flex; flex-direction: column; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(27,42,65,.35); }
@@ -894,6 +942,13 @@
     const autoBox = el('input', { type: 'checkbox', role: 'switch' });
     const autoDesc = el('div', { class: 'toggle-desc' });
     const folder = el('input', { type: 'text' });
+    const modeLine = el('div', { class: 'mode-line' });
+    function refreshMode() {
+      const srv = useServer();
+      modeLine.textContent = srv ? '🚀 ההעברות לדרייב עוברות דרך השרת (לא דרך חבילת הגלישה שלך)' : '🌐 ההעברות לדרייב עוברות דרך האינטרנט שלך';
+      modeLine.className = 'mode-line' + (srv ? ' srv' : '');
+    }
+    setTimeout(refreshMode, 0);
     const how = el('p', { class: 'how' });
     const note = el('p', { class: 'note' });
     const list = el('ul');
@@ -906,11 +961,11 @@
     const viewMain = el('div', { class: 'view' },
       el('div', { class: 'section' },
         el('label', { class: 'toggle-row' },
-          el('div', { class: 'toggle-text' }, el('div', { class: 'toggle-title', text: 'הורדות מג\u2019מבו מייל עוברות לדרייב' }), autoDesc),
+          el('div', { class: 'toggle-text' }, el('div', { class: 'toggle-title', text: 'גם כפתור ההורדה הרגיל מעביר לדרייב' }), autoDesc),
           el('span', { class: 'switch' }, autoBox, el('span', { class: 'track' })))),
       el('div', { class: 'section' },
         el('label', { class: 'field-label', text: 'שמירה בתיקייה' }),
-        el('div', { class: 'folder-input' }, el('span', { class: 'fi', text: '📁' }), folder)),
+        el('div', { class: 'folder-input' }, el('span', { class: 'fi', text: '📁' }), folder), modeLine),
       listBox,
       el('div', { class: 'actions' }, setupBtn, folderBtn, how, note));
 
@@ -937,10 +992,12 @@
         el('p', { class: 'st', text: '"+ שליחה מדרייב" מוסיף הרשאת קריאה לדרייב, כדי לבחור ממנו קבצים לשליחה בג\u2019מבו מייל.' }));
     }
     const accIn = el('input', { type: 'password', placeholder: 'ya29....' });
+    const eyeFor = (inp) => el('button', { class: 'eye', type: 'button', text: 'הצגה', onclick: (e) => { const show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; e.target.textContent = show ? 'הסתרה' : 'הצגה'; } });
+    const flash = (inp) => { inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash'); };
     const accSt = el('p', { class: 'st' });
     const accBox = el('div', {},
       pgButtons('access'),
-      el('label', { class: 'fld' }, el('span', { text: 'Access token (מתמלא לבד אחרי "שמירה בסקריפט")' }), accIn),
+      el('label', { class: 'fld' }, el('span', { text: 'Access token (מתמלא לבד אחרי "שמירה בסקריפט")' }), el('div', { class: 'eye-wrap' }, accIn, eyeFor(accIn))),
       el('div', { class: 'row-btns' }, el('button', { class: 'small-primary', type: 'button', text: 'שמירה ובדיקה', onclick: saveAccess })),
       accSt,
       el('details', {}, el('summary', { text: 'איך זה עובד?' }), el('ol', {},
@@ -956,7 +1013,7 @@
       el('label', { class: 'fld' }, el('span', { text: 'Client ID' }), idIn),
       el('label', { class: 'fld' }, el('span', { text: 'Client secret' }), secIn),
       pgButtons('refresh'),
-      el('label', { class: 'fld' }, el('span', { text: 'Refresh token (מתמלא לבד אחרי "שמירה בסקריפט")' }), refIn),
+      el('label', { class: 'fld' }, el('span', { text: 'Refresh token (מתמלא לבד אחרי "שמירה בסקריפט")' }), el('div', { class: 'eye-wrap' }, refIn, eyeFor(refIn))),
       el('div', { class: 'row-btns' }, el('button', { class: 'small-primary', type: 'button', text: 'שמירה ובדיקה', onclick: saveRefresh })),
       refSt,
       el('details', {}, el('summary', { text: 'איך משיגים Client ID ו-Client secret?' }), el('ol', {},
@@ -964,23 +1021,38 @@
         el('li', { text: 'ב-Google Auth Platform לוחצים Get started, בוחרים External, ואחר כך Publish app (אחרת הטוקן פג אחרי 7 ימים).' }),
         el('li', {}, 'ב-Clients יוצרים Client מסוג Web application, ומוסיפים כתובת הפניה: ', el('code', { text: 'https://developers.google.com/oauthplayground' })),
         el('li', { text: 'מעתיקים לכאן את ה-Client ID וה-Client secret, ולוחצים על הכפתור של ה-Playground.' }))));
-    const sendBox = el('input', { type: 'checkbox' });
+    const thumbBox = el('input', { type: 'checkbox' });
     const sendSt = el('p', { class: 'st' });
     const sendSec = el('div', { class: 'section' },
+      el('div', { class: 'toggle-title', text: 'שליחה מדרייב לג\u2019מבו מייל' }),
+      el('div', { class: 'toggle-desc', text: 'כפתור "הוספה מדרייב" בדף השליחה. כדי להשתמש בו, מוציאים טוקן עם הכפתור "טוקן להעברה + שליחה מדרייב" (הרשאת קריאה לדרייב, בלי למחוק או לשנות).' }),
+      sendSt,
       el('label', { class: 'toggle-row' },
-        el('div', { class: 'toggle-text' }, el('div', { class: 'toggle-title', text: 'שליחה מדרייב לג\u2019מבו מייל' }),
-          el('div', { class: 'toggle-desc', text: 'כפתור "הוספה מדרייב" בדף השליחה. דורש הרשאת קריאה לדרייב (drive.readonly): לראות ולהוריד קבצים, בלי למחוק או לשנות.' })),
-        el('span', { class: 'switch' }, sendBox, el('span', { class: 'track' }))),
-      sendSt);
+        el('div', { class: 'toggle-text' }, el('div', { class: 'toggle-title', text: 'תצוגה מקדימה רק דרך השרת' }),
+          el('div', { class: 'toggle-desc', text: 'התמונות המוקטנות יגיעו דרך השרת ולא ישירות מגוגל. זה לא חוסך בחבילת הגלישה, והתמונות לא עוברות דרך הסינון שלכם.' })),
+        el('span', { class: 'switch' }, thumbBox, el('span', { class: 'track' }))));
     function showSendSt() {
-      sendBox.checked = !!S.get('sendFromDrive', false);
-      if (!sendBox.checked) setSt(sendSt, '');
-      else if (hasReadScope()) setSt(sendSt, 'פעיל. ההרשאה אושרה.', 'ok');
-      else setSt(sendSt, 'ההרשאה עוד לא אושרה. לחצו למעלה על "טוקן להעברה + שליחה מדרייב".', 'err');
+      if (hasReadScope()) setSt(sendSt, 'פעיל: ההרשאה אושרה.', 'ok');
+      else setSt(sendSt, 'לא פעיל: הטוקן הנוכחי הוא להעברה לדרייב בלבד.');
+      thumbBox.checked = S.get('thumbsViaRelay', false) === true;
     }
-    sendBox.onchange = () => { S.set({ sendFromDrive: sendBox.checked }); showSendSt(); };
+    thumbBox.onchange = () => S.set({ thumbsViaRelay: thumbBox.checked });
+    const srvBox = el('input', { type: 'checkbox' });
+    const srvSt = el('p', { class: 'st' });
+    const srvSec = el('div', { class: 'section' },
+      el('label', { class: 'toggle-row' },
+        el('div', { class: 'toggle-text' }, el('div', { class: 'toggle-title', text: 'העברה דרך השרת המשותף' }),
+          el('div', { class: 'toggle-desc', text: 'חוסך בחבילת הגלישה: השרת מוריד מג\u2019מבו מייל ומעלה לדרייב בעצמו. השרת לא שומר טוקנים ולא קבצים. שימו לב: הקבצים לא עוברים דרך הסינון שלכם.' })),
+        el('span', { class: 'switch' }, srvBox, el('span', { class: 'track' }))),
+      el('div', { class: 'row-btns' }, el('button', { class: 'small-secondary', type: 'button', text: 'בדיקת חיבור', onclick: async () => {
+        setSt(srvSt, 'בודק… (אם השרת ישן, זה יכול לקחת עד דקה)');
+        try { await wakeServer(); setSt(srvSt, 'השרת המשותף זמין.', 'ok'); } catch (e) { setSt(srvSt, e.message, 'err'); }
+      } })),
+      srvSt);
+    srvBox.checked = useServer();
+    srvBox.onchange = () => S.set({ useServer: srvBox.checked });
     const viewSet = el('div', { class: 'view', hidden: true },
-      el('div', { class: 'section' }, el('div', { class: 'modes' }, modeAccess, modeRefresh), accBox, refBox), sendSec);
+      el('div', { class: 'section' }, el('div', { class: 'modes' }, modeAccess, modeRefresh), accBox, refBox), srvSec, sendSec);
 
     const panel = el('div', { class: 'panel', role: 'dialog', 'aria-label': 'העברה לדרייב', hidden: true },
       el('div', { class: 'head' }, el('img', { src: ICON, alt: '' }),
@@ -1057,10 +1129,10 @@
       const done = all.filter((r) => r.state === 'done').length;
       const ready = credsReady();
       if (paused && !busy) { pill.className = 'pill armed'; pill.textContent = `${paused} ממתינים לטוקן חדש`; }
-      else { pill.className = 'pill' + (busy ? ' busy' : ready && isOn() ? '' : !ready ? ' alert' : ' armed'); pill.textContent = busy ? `מעביר ${busy} ${busy === 1 ? 'קובץ' : 'קבצים'}` : !ready ? 'לא מחובר לדרייב' : isOn() ? 'הורדות עוברות לדרייב' : 'כבוי: הורדות נשמרות במחשב'; }
+      else { pill.className = 'pill' + (busy ? ' busy' : !ready ? ' alert' : ''); pill.textContent = busy ? `מעביר ${busy} ${busy === 1 ? 'קובץ' : 'קבצים'}` : !ready ? 'לא מחובר לדרייב' : isOn() ? 'כל הורדה עוברת לדרייב' : 'מוכן להעברה'; }
       fab.classList.toggle('armed', busy > 0 || paused > 0);
-      fab.classList.toggle('alert', !busy && !paused && !ready && isOn());
-      fabLabel.textContent = busy ? 'מעביר לדרייב…' : paused ? 'ממתין לטוקן חדש' : !ready && isOn() ? 'לא מחובר לדרייב' : 'העברה לדרייב';
+      fab.classList.toggle('alert', !busy && !paused && !ready);
+      fabLabel.textContent = busy ? 'מעביר לדרייב…' : paused ? 'ממתין לטוקן חדש' : !ready ? 'לא מחובר לדרייב' : 'העברה לדרייב';
       fabCount.hidden = busy + paused === 0; fabCount.textContent = String(busy + paused);
       listBox.hidden = all.length === 0;
       listTitle.textContent = busy ? `מעביר ${busy}, הושלמו ${done}` : `הועברו ${done} מתוך ${all.length}`;
@@ -1070,10 +1142,11 @@
       autoBox.checked = isOn() && ready;
       autoBox.disabled = !ready;
       setupBtn.hidden = ready;
-      autoDesc.textContent = !ready ? 'צריך קודם להתחבר לדרייב (בלשונית "הגדרות").' : isOn() ? 'פועל. הקבצים לא יישמרו במחשב.' : 'כבוי. הורדות נשמרות במחשב כרגיל.';
-      how.hidden = !(ready && isOn());
+      autoDesc.textContent = !ready ? 'צריך קודם להתחבר לדרייב (בלשונית "הגדרות").' : isOn() ? 'פועל: כל הורדה מג\u2019מבו מייל עוברת לדרייב.' : 'כבוי: הכפתור הרגיל מוריד למחשב.';
+      how.hidden = !ready;
       how.textContent = '';
-      how.append('לוחצים על ', el('b', { text: 'Download' }), ' של ג\u2019מבו מייל כרגיל, והקבצים עוברים לתיקייה בדרייב.');
+      if (isOn()) how.append('כל לחיצה על הורדה בג\u2019מבו מייל מעבירה לדרייב, ולא למחשב.');
+      else how.append('קובץ בודד: לוחצים על ', el('b', { text: 'לדרייב' }), ' שמעל כפתור ההורדה של הקובץ. כל הקבצים יחד (ZIP אחד): ', el('b', { text: 'הכול לדרייב' }), ' שליד כפתור ההורדה.');
       if (root.activeElement !== folder) folder.value = S.get('folderName', "קבצים מג'מבו מייל");
       if (!ready) {
         const expired = S.get('authMode', 'access') === 'access' && S.get('accessToken');
@@ -1084,8 +1157,13 @@
     autoBox.onchange = () => { S.set({ autoJumbo: autoBox.checked }); renderState(); };
     let ft = null;
     folder.oninput = () => { clearTimeout(ft); ft = setTimeout(() => S.set({ folderName: folder.value.trim() || "קבצים מג'מבו מייל" }), 400); };
-    for (const k of ['accessToken', 'accessExp', 'pgRefresh', 'authMode', 'grantedScopes', 'sendFromDrive']) {
-      GM_addValueChangeListener(k, () => { renderState(); if (!viewSet.hidden) loadSettings(); });
+    for (const k of ['accessToken', 'accessExp', 'pgRefresh', 'authMode', 'grantedScopes', 'thumbsViaRelay', 'useServer']) {
+      GM_addValueChangeListener(k, (_n, _o, nv, remote) => {
+        renderState(); refreshMode(); loadSettings();
+        // טוקן שנשמר מה-Playground: מראים אותו בשדה ומדגישים לרגע
+        if (remote && nv && k === 'accessToken') { accIn.value = nv; flash(accIn); }
+        if (remote && nv && k === 'pgRefresh') { refIn.value = nv; flash(refIn); }
+      });
     }
 
     // ---------- שורות העברה ----------
@@ -1140,6 +1218,50 @@
     };
     const nameFromUrl = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').filter(Boolean).pop() || ''); } catch (_) { return ''; } };
 
+
+    // העברה דרך השרת: רק הכתובת והטוקן יוצאים מהדפדפן, הקובץ עובר מהשרת לדרייב
+    async function runServerJob(src, r) {
+      try {
+        await wakeServer(() => show(r, 'starting', 'מעיר את השרת… (עד דקה)', 'busy', 2));
+        const token = await getToken();
+        const created = await relayCall('/api/jobs', 'POST', { url: src.url, token, folderName: S.get('folderName', "קבצים מג'מבו מייל"), name: src.name || '', description: 'הועבר והועלה על ידי המערכת של מטען נייד. לפרופיל שלי במתמחים טופ: https://mitmachim.top/user/%D7%9E%D7%98%D7%A2%D7%9F-%D7%A0%D7%99%D7%99%D7%93' });
+        const sid = created.id;
+        let fails = 0;
+        for (;;) {
+          await sleepMs(5000);
+          let st;
+          try { st = await relayCall('/api/jobs/' + sid); fails = 0; }
+          catch (e) { if (++fails > 6) throw new Error('השרת הפסיק לענות באמצע ההעברה. הורידו את הקובץ שוב.'); continue; }
+          if (st.name) setName(r, st.name);
+          if (st.folderLink) { folderBtn.href = st.folderLink; folderBtn.hidden = false; }
+          if (st.state === 'done') {
+            show(r, 'done', `הועבר לדרייב דרך השרת${st.total ? ', ' + size(st.total) : ''}`, 'ok');
+            r.slot.textContent = '';
+            const link = st.link || st.folderLink;
+            if (link) r.slot.append(el('a', { class: 'open', href: link, target: '_blank', rel: 'noopener', text: 'פתיחה' }));
+            return;
+          }
+          if (st.state === 'failed') throw new Error(st.error || 'ההעברה בשרת נכשלה');
+          if (st.state === 'needToken') {
+            let t;
+            try { t = await getToken(true); }
+            catch (e) {
+              if (e.code !== 'TOKEN_EXPIRED') throw e;
+              show(r, 'paused', 'נעצר. ימשיך אחרי טוקן חדש', 'warn', st.total ? st.done / st.total * 100 : 40);
+              await waitForNewToken();
+              t = await getToken();
+            }
+            await relayCall(`/api/jobs/${sid}/token`, 'POST', { token: t });
+            continue;
+          }
+          const pct = st.total ? st.done / st.total : 0;
+          show(r, 'uploading', st.state === 'queued' ? 'ממתין בתור בשרת…' : `מעביר דרך השרת ${Math.round(pct * 100)}%${st.total ? `, ${size(st.done)} מתוך ${size(st.total)}` : ''}`, 'busy', Math.max(3, pct * 100));
+        }
+      } catch (e) {
+        show(r, 'failed', 'שרת ההעברה: ' + e.message, 'err');
+      }
+    }
+
     let jobSeq = 0;
     async function runJob(src) {
       const id = ++jobSeq;
@@ -1148,6 +1270,8 @@
       panel.hidden = false;
       if (viewMain.hidden) showView('main');
       show(r, 'starting', 'מתחיל…', 'busy', 2);
+
+      if (src.kind === 'server') return runServerJob(src, r);
 
       // 1. קבלת הקובץ מג'מבו מייל
       let blob, name = src.name;
@@ -1188,7 +1312,7 @@
             const init = await gapi({
               method: 'POST', url: `${UPLOAD}?uploadType=resumable&fields=id,webViewLink`,
               headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(total) },
-              data: JSON.stringify({ name, mimeType: mime, parents: [folderInfo.id] })
+              data: JSON.stringify({ name, mimeType: mime, parents: [folderInfo.id], description: 'הועבר והועלה על ידי המערכת של מטען נייד. לפרופיל שלי במתמחים טופ: https://mitmachim.top/user/%D7%9E%D7%98%D7%A2%D7%9F-%D7%A0%D7%99%D7%99%D7%93' })
             });
             if (!init.ok) throw new Error(errText(init));
             session = init.headers.location;
@@ -1202,7 +1326,7 @@
           while (offset < total || total === 0) {
             const end = Math.min(offset + CHUNK, total);
             const pct = total ? offset / total : 1;
-            show(r, 'uploading', `מעלה לדרייב ${Math.round(pct * 100)}%, ${size(offset)} מתוך ${size(total)}`, 'busy', 40 + pct * 60);
+            show(r, 'uploading', `מעלה לדרייב דרך האינטרנט שלך ${Math.round(pct * 100)}%, ${size(offset)} מתוך ${size(total)}`, 'busy', 40 + pct * 60);
             const body = await blob.slice(offset, end).arrayBuffer();
             const res = await gapi({ method: 'PUT', url: session, headers: { 'Content-Range': total ? `bytes ${offset}-${end - 1}/${total}` : 'bytes */0' }, data: body, binary: true });
             if (res.status === 308) { offset = end; continue; }
@@ -1233,13 +1357,51 @@
     }
 
 
+
+    // ---------- תמונות מוקטנות מדרייב ----------
+    const thumbMem = new Map();
+    const abToDataUrl = (ab, mime) => {
+      const u = new Uint8Array(ab); let bin = '';
+      for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      return `data:${mime || 'image/jpeg'};base64,${btoa(bin)}`;
+    };
+    async function looksReal(dataUrl) {
+      try {
+        const [head, b64] = dataUrl.split(',');
+        const bin = atob(b64);
+        if (bin.length < 400) return false;
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const bmp = await createImageBitmap(new Blob([bytes], { type: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' }));
+        return bmp.width >= 16 && bmp.height >= 16;
+      } catch (_) { return false; }
+    }
+    async function driveThumb(m) {
+      const key = m.key || m.url;
+      if (thumbMem.has(key)) return thumbMem.get(key);
+      const token = await getToken();
+      let data;
+      if (S.get('thumbsViaRelay', false)) {
+        data = (await relayCall('/thumb', 'POST', { id: m.id, size: m.size || 120, v: m.v || '', token })).data;
+      } else {
+        const r = await new Promise((ok, fail) => GM_xmlhttpRequest({ method: 'GET', url: m.url, headers: { Authorization: `Bearer ${token}` }, responseType: 'arraybuffer', onload: ok, onerror: fail, ontimeout: fail }));
+        const ct = (/content-type:\s*([^\r\n;]+)/i.exec(r.responseHeaders || '') || [])[1] || '';
+        if (r.status !== 200 || !/^image\//.test(ct)) throw new Error('התצוגה המקדימה לא נטענה');
+        data = abToDataUrl(r.response, ct);
+      }
+      if (!data || !(await looksReal(data))) throw new Error('נראה שהתמונה חסומה אצלכם.');
+      thumbMem.set(key, data);
+      return data;
+    }
+
     // ---------- שכבת תאימות: הפעולות שבתוסף עוברות לרקע, כאן הן מקומיות ----------
     const FOLDER_Q = "mimeType != 'application/vnd.google-apps.folder'";
     async function send(m) {
       try {
-        if (m.type === 'readStatus') return { ok: true, enabled: !!S.get('sendFromDrive', false), has: hasReadScope(), ready: credsReady() };
+        if (m.type === 'readStatus') return { ok: true, enabled: hasReadScope(), has: hasReadScope(), ready: credsReady() };
+        if (m.type === 'driveThumb') return { ok: true, data: await driveThumb(m) };
         if (m.type === 'freshToken') return { ok: true, token: await getToken(!!m.force) };
-        if (m.type === 'openOptionsSend') { S.set({ sendFromDrive: true }); showView('set'); sendSec.scrollIntoView({ behavior: 'smooth' }); return { ok: true }; }
+        if (m.type === 'openOptionsSend') { showView('set'); sendSec.scrollIntoView({ behavior: 'smooth' }); return { ok: true }; }
         if (m.type === 'driveList') {
           const fields = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,viewedByMeTime,sharingUser(displayName))';
           let q, orderBy = 'folder,modifiedTime desc';
@@ -1288,14 +1450,103 @@
     const dpFill = el('div');
     const dpBar = el('div', { class: 'dp-bar', hidden: true }, dpFill);
     const dpAdd = el('button', { class: 'primary', type: 'button', text: 'בחרו קבצים', disabled: true });
+    // סימון כל הקבצים שמוצגים כרגע
+    let shown = [];   // { f, cb, item }
+    const dpAllBtn = el('button', { class: 'dp-all', type: 'button', text: 'סימון הכל' });
+    const allMarked = () => shown.length && shown.every((x) => chosen.has(x.f.id));
+    const syncAllBtn = () => { dpAllBtn.textContent = allMarked() ? 'ביטול הסימון' : 'סימון הכל'; dpAllBtn.disabled = !shown.length; };
+    dpAllBtn.addEventListener('click', () => {
+      if (busyAdd) return;
+      const on = !allMarked();
+      for (const x of shown) {
+        if (on) chosen.set(x.f.id, x.f); else chosen.delete(x.f.id);
+        x.cb.checked = on; x.item.classList.toggle('sel', on);
+      }
+      updateAdd(); syncAllBtn();
+    });
+
+
+    // הצגת תמונה בלי לטעון כתובת (ג'מבו מייל חוסם כתובות data: בתמונות): מפענחים ומציירים על canvas
+    async function toBitmap(dataUrl) {
+      const [head, b64] = dataUrl.split(',');
+      const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return createImageBitmap(new Blob([bytes], { type: mime }));
+    }
+    async function paintThumb(el0, dataUrl, w, h, cover = true) {
+      const bmp = await toBitmap(dataUrl);
+      if (bmp.width < 16 || bmp.height < 16) throw new Error('התקבלה תמונה ריקה');
+      const c = document.createElement('canvas');
+      const ratio = devicePixelRatio || 1;
+      let dw = w, dh = h;
+      if (!cover) { const k = Math.min(w / bmp.width, h / bmp.height, 1); dw = Math.round(bmp.width * k); dh = Math.round(bmp.height * k); }
+      c.width = dw * ratio; c.height = dh * ratio;
+      c.style.width = dw + 'px'; c.style.height = dh + 'px';
+      const ctx = c.getContext('2d');
+      if (cover) {
+        const k = Math.max(c.width / bmp.width, c.height / bmp.height);
+        const sw = c.width / k, sh = c.height / k;
+        ctx.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      } else ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      // לא מעתיקים את העיגול המסתובב של הטעינה לתמונה הגדולה
+      c.className = el0.classList.contains('dp-big') ? 'dp-big-img' : el0.className;
+      if (el0.title) c.title = el0.title;
+      return c;
+    }
+
+    // תמונות מוקטנות: נטענות רק כשהן נראות, עד 4 במקביל
+    const thumbQueue = []; let thumbActive = 0;
+    const pumpThumbs = () => {
+      while (thumbActive < 4 && thumbQueue.length) {
+        const { img, url } = thumbQueue.shift();   // eslint-disable-line
+        if (!img.isConnected) continue;
+        thumbActive++;
+        send({ type: 'driveThumb', url, key: img.dataset.key, id: img.dataset.id, size: 120, v: img.dataset.v })
+          .then(async (r) => {
+            if (!r.ok) throw new Error(r.error);
+            const c = await paintThumb(img, r.data, 40, 40, true);
+            c.addEventListener('click', img._open);
+            img.replaceWith(c);
+          })
+          .catch(() => {
+            if (!img.isConnected) return;
+            // גם בלי תמונה מוקטנת, לחיצה על הסמל פותחת את התצוגה הגדולה
+            img._fallback.style.cursor = 'zoom-in';
+            img._fallback.title = 'לחיצה לתצוגה מקדימה';
+            img._fallback.addEventListener('click', img._open);
+            img.replaceWith(img._fallback);
+          })
+          .finally(() => { thumbActive--; pumpThumbs(); });
+      }
+    };
+    const thumbObs = new IntersectionObserver((ents) => {
+      for (const en of ents) if (en.isIntersecting) { thumbObs.unobserve(en.target); thumbQueue.push({ img: en.target, url: en.target.dataset.src }); }
+      pumpThumbs();
+    });
+    function openPreview(f) {
+      const big = el('div', { class: 'dp-big' });
+      const cap = el('div', { class: 'cap', text: `${f.name} – טוען תצוגה מקדימה…` });
+      const box = el('div', { class: 'dp-prev', onclick: () => box.remove() }, big, cap);
+      wrap.append(box);
+      send({ type: 'driveThumb', url: f.thumbnailLink.replace(/=s\d+$/, '=s1200'), key: `${f.id}:${f.modifiedTime || ''}:1200:v2`, id: f.id, size: 1200, v: f.modifiedTime || '' })
+        .then(async (r) => {
+          if (!r.ok) throw new Error(r.error);
+          const c = await paintThumb(big, r.data, Math.round(innerWidth * 0.92), Math.round(innerHeight * 0.86), false);
+          big.replaceWith(c);
+          cap.textContent = `${f.name} (לחיצה לסגירה)`;
+        })
+        .catch((e) => { cap.textContent = 'לא ניתן להציג תצוגה מקדימה' + (e?.message ? `: ${e.message}` : '.'); });
+    }
     const dpWin = el('div', { class: 'dp', role: 'dialog', 'aria-label': 'הוספה מדרייב' },
       el('div', { class: 'head' }, el('img', { src: ICON, alt: '' }),
         el('div', { class: 'titles' }, el('h3', { text: 'הוספת קבצים מדרייב' }), el('span', { class: 'pill', text: 'הקבצים ייכנסו לשליחה בג\u2019מבו מייל' })),
         el('button', { class: 'icon', type: 'button', 'aria-label': 'סגירה', text: '✕', onclick: () => closePicker() })),
       dpTabs,
-      el('div', { class: 'dp-tools' }, dpSearch),
+      el('div', { class: 'dp-tools' }, dpSearch, dpAllBtn),
       dpCrumbs, dpList,
-      el('div', { class: 'dp-foot' }, dpBar, dpMsg, dpAdd));
+      el('div', { class: 'dp-foot' }, dpBar, dpMsg, el('p', { class: 'dp-via', text: '🌐 ההורדה מדרייב עוברת דרך האינטרנט שלך: הקבצים צריכים להגיע לדפדפן כדי להיכנס לג\u2019מבו מייל.' }), dpAdd));
     const dpBack = el('div', { class: 'dp-back', hidden: true, onclick: (e) => { if (e.target === dpBack && !busyAdd) closePicker(); } }, dpWin);
     wrap.append(dpBack);
 
@@ -1328,6 +1579,7 @@
       renderCrumbs();
       dpList.textContent = '';
       dpList.append(el('div', { class: 'dp-empty', text: 'טוען…' }));
+      shown = []; syncAllBtn();
       const q = dpSearch.value.trim();
       const cur = path[path.length - 1];
       const req = q ? { type: 'driveList', search: q } : { type: 'driveList', view, folderId: cur.id || '' };
@@ -1350,9 +1602,18 @@
         const t = typeOf(f.name);
         const cb = el('input', { type: 'checkbox', tabindex: '-1' });
         cb.checked = chosen.has(f.id);
+        const chip = el('div', { class: 'chip', text: isFolder ? '📁' : (extOf(f.name) || 'קובץ').slice(0, 4), style: isFolder ? '' : `color:${t.color};background:${t.bg}` });
+        let visual = chip;
+        if (!isFolder && f.hasThumbnail && f.thumbnailLink) {
+          visual = el('div', { class: 'dp-thumb', title: 'לחיצה לתצוגה מקדימה', 'data-src': f.thumbnailLink.replace(/=s\d+$/, '=s120'), 'data-key': `${f.id}:${f.modifiedTime || ''}:120:v2`, 'data-id': f.id, 'data-v': f.modifiedTime || '' });
+          visual._fallback = chip;
+          visual._open = (e) => { e.stopPropagation(); openPreview(f); };
+          visual.addEventListener('click', visual._open);
+          thumbObs.observe(visual);
+        }
         const item = el('div', { class: 'dp-item' + (isFolder ? ' folder' : '') + (isGoogleDoc ? ' disabled' : '') + (cb.checked ? ' sel' : ''), role: 'button', tabindex: '0' },
           isFolder || isGoogleDoc ? el('span', { class: 'spacer' }) : cb,
-          el('div', { class: 'chip', text: isFolder ? '📁' : (extOf(f.name) || 'קובץ').slice(0, 4), style: isFolder ? '' : `color:${t.color};background:${t.bg}` }),
+          visual,
           el('div', { class: 'info' }, el('div', { class: 'fname', text: f.name, title: f.name }),
             el('div', { class: 'sub', text: (isFolder ? 'תיקייה' : isGoogleDoc ? 'מסמך גוגל: לא ניתן לשלוח ישירות' : new Date(f.viewedByMeTime && view === 'recent' ? f.viewedByMeTime : f.modifiedTime).toLocaleDateString('he-IL')) + (f.sharingUser?.displayName ? `, שותף על ידי ${f.sharingUser.displayName}` : '') })),
           el('span', { class: 'meta2', text: isFolder ? '›' : size(Number(f.size || 0)) }));
@@ -1362,12 +1623,14 @@
           if (chosen.has(f.id)) chosen.delete(f.id); else chosen.set(f.id, f);
           cb.checked = chosen.has(f.id);
           item.classList.toggle('sel', cb.checked);
-          updateAdd();
+          updateAdd(); syncAllBtn();
         };
+        if (!isFolder && !isGoogleDoc) shown.push({ f, cb, item });
         item.addEventListener('click', act);
         item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
         dpList.append(item);
       }
+      syncAllBtn();
       if (r.next) {
         const more = el('button', { class: 'link dp-more', type: 'button', text: 'טעינת עוד' });
         more.onclick = async () => {
@@ -1465,10 +1728,9 @@
         dpList.textContent = '';
         if (!st.enabled) {
           dpList.append(el('div', { class: 'dp-empty' },
-            el('p', { text: 'כדי לבחור קבצים מהדרייב, צריך להפעיל את האפשרות "שליחה מדרייב לג\u2019מבו מייל" ולאשר הרשאת קריאה לדרייב (drive.readonly).' }),
+            el('p', { text: 'כדי לבחור קבצים מהדרייב, צריך טוקן עם הרשאת קריאה לדרייב (drive.readonly). בדף ההגדרות לוחצים על "טוקן להעברה לדרייב + שליחה מדרייב".' }),
             el('p', { text: 'ההרשאה מאפשרת לראות ולהוריד את הקבצים בדרייב, אבל לא למחוק או לשנות אותם.' }),
-            el('button', { class: 'primary', type: 'button', text: 'הפעלה בדף ההגדרות', onclick: async () => {
-              await CHROME.storage.local.set({ sendFromDrive: true });
+            el('button', { class: 'primary', type: 'button', text: 'לדף ההגדרות', onclick: async () => {
               send({ type: 'openOptionsSend' });
             } })));
           return;
@@ -1504,7 +1766,6 @@
       placePageButton();
     }
     refreshSend();
-    GM_addValueChangeListener('sendFromDrive', () => refreshSend());
     GM_addValueChangeListener('grantedScopes', () => refreshSend());
     // גם בחלונית של התוסף: כפתור לשליחה מדרייב, בדף השליחה בלבד
     const panelSendBtn = el('button', { class: 'secondary', type: 'button', hidden: true, text: '☁️ הוספת קבצים מדרייב לשליחה', onclick: () => openPicker() });
@@ -1515,6 +1776,82 @@
     new MutationObserver(() => { clearTimeout(placeTimer); placeTimer = setTimeout(() => { placePageButton(); updatePanelSend(); }, 500); })
       .observe(document.body, { childList: true, subtree: true });
 
+
+    // ================= כפתורי "לדרייב" בג'מבו מייל =================
+    function cloudUpIcon(px = 16) {
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', String(px)); svg.setAttribute('height', String(px)); svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('fill', 'currentColor');
+      path.setAttribute('d', 'M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z');
+      svg.append(path);
+      return svg;
+    }
+    let armTimer = null;
+    function arm(name, auto) {
+      if (!credsReady()) { panel.hidden = false; renderState(); return false; }
+      armedUntil = Date.now() + 60000;
+      armedName = name || '';
+      panel.hidden = false;
+      clearInterval(armTimer);
+      const tick = () => {
+        const left = Math.ceil((armedUntil - Date.now()) / 1000);
+        if (left <= 0) { clearInterval(armTimer); if (note.classList.contains('armed')) setNote(''); return; }
+        setNote(auto ? `מעביר לדרייב… (עוד ${left} שניות לקבצים נוספים)` : `לחצו על ההורדה של הקובץ, והוא יעבור לדרייב. (עוד ${left} שניות)`, 'armed');
+      };
+      tick();
+      armTimer = setInterval(tick, 1000);
+      return true;
+    }
+    const cleanName = (t) => (t || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
+    const tileName = (item) => cleanName(item.querySelector('img[title]:not(.jm-icon)')?.getAttribute('title') || item.querySelector('.grid-card-footer')?.textContent || '');
+    const fire = (e, types) => types.forEach((t) => e.dispatchEvent(new MouseEvent(t, { bubbles: !/enter/.test(t), cancelable: true, view: window })));
+    function findTileDownload(item) {
+      const icons = [...item.querySelectorAll('.bottom-section .right-section img, .right-section img.clickable-icon')].filter((e) => !e.closest('[data-g2d-tile]'));
+      const byName = icons.find((e) => /download|arrow-down|הורד/i.test((e.getAttribute('src') || '') + ' ' + (e.getAttribute('title') || '')));
+      return byName || icons[icons.length - 1] || null;
+    }
+    async function driveTile(item) {
+      const name = tileName(item);
+      if (!arm(name, false)) return;
+      let ctl = findTileDownload(item);
+      for (let i = 0; !ctl && i < 4; i++) { fire(item, ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'mousemove']); await sleepMs(250); ctl = findTileDownload(item); }
+      if (ctl) { fire(ctl, ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']); return; }
+      setNote(`לחצו עכשיו על כפתור ההורדה של "${name}", והקובץ יעבור לדרייב.`, 'armed');
+    }
+    const HDR_STYLE = 'margin-inline-start:8px;display:inline-flex;align-items:center;gap:6px;padding:0 16px;height:40px;border:0;border-radius:20px;background:#0F7B6C;color:#fff;font:600 15px Rubik,"Segoe UI",Arial,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(15,123,108,.3)';
+    const TILE_STYLE = 'position:absolute;bottom:46px;z-index:6;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:0;border-radius:14px;background:#0F7B6C;color:#fff;font:600 12px Rubik,"Segoe UI",Arial,sans-serif;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.25);opacity:.95;';
+    function placeDriveButtons() {
+      for (const dl of document.querySelectorAll('.download-section button.download-button')) {
+        if (dl.parentElement.querySelector('[data-g2d-dl]')) continue;
+        const b = document.createElement('button');
+        b.type = 'button'; b.setAttribute('data-g2d-dl', '1'); b.setAttribute('style', HDR_STYLE);
+        b.title = 'העברת כל הקבצים לגוגל דרייב (כקובץ ZIP אחד)';
+        b.append(cloudUpIcon(18), document.createTextNode('הכול לדרייב'));
+        b.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const subject = (document.querySelector('.mail-subject-text span, .mail-subject')?.textContent || '').trim();
+          if (arm(`${subject || 'קבצים מג\u2019מבו מייל'} ${new Date().toLocaleDateString('he-IL').replace(/\./g, '-')}.zip`, true)) dl.click();
+        });
+        dl.insertAdjacentElement('afterend', b);
+      }
+      const side = document.querySelector('.page-content.rtl') ? 'left' : 'right';
+      for (const item of document.querySelectorAll('.cool-grid-item .grid-item')) {
+        if (item.querySelector('[data-g2d-tile]')) continue;
+        if (getComputedStyle(item).position === 'static') item.style.position = 'relative';
+        const b = document.createElement('button');
+        b.type = 'button'; b.setAttribute('data-g2d-tile', '1'); b.setAttribute('style', TILE_STYLE + `${side}:8px;`);
+        b.title = 'העברת הקובץ הזה ישר לגוגל דרייב';
+        b.append(cloudUpIcon(15), document.createTextNode('לדרייב'));
+        for (const t of ['pointerdown', 'mousedown', 'mouseup']) b.addEventListener(t, (e) => e.stopPropagation(), true);
+        b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); driveTile(item); });
+        item.append(b);
+      }
+    }
+    placeDriveButtons();
+    let dlTimer = null;
+    new MutationObserver(() => { clearTimeout(dlTimer); dlTimer = setTimeout(placeDriveButtons, 400); }).observe(document.body, { childList: true, subtree: true });
 
     startJob = (src) => { runJob(src); };
     pendingStarts.splice(0).forEach((s) => runJob(s));
