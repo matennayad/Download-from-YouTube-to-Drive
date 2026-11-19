@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name        תיקון ZI ל-ZIP במתמחים טופ - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.8
-// @description העלאת ZIP כ-ZIP אמיתי, הורדת ZI ו-AP כ-ZIP ו-APK, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה, וכוכביות בקישורים לדרייב, לג'מבו מייל ול-magicode
+// @version     1.9
+// @description העלאת ZIP כ-ZIP אמיתי, הורדת סיומות שבורות (ZI, AP, JA, AR ועוד) כ-ZIP, APK, JAR, תצוגת קבצים מצורפים, באנר לקישורים לנושאים וספויילרים בהמשך השורה, וכוכביות בקישורים לדרייב ולגוגל דוקס, לג'מבו מייל ול-magicode
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
 // @match       https://drive.google.com/*
+// @match       https://docs.google.com/*
 // @match       https://jumbomail.me/*
 // @match       https://*.jumbomail.me/*
 // @match       https://send.magicode.me/*
@@ -43,16 +44,16 @@
     // כוכביות בקישורים
     // =====================================================================
 
-    // כוכביות בקישורים: השרת של מתמחים לא שומר קישורים לדרייב, לג'מבו מייל ול-send.magicode.me,
+    // כוכביות בקישורים: השרת של מתמחים לא שומר קישורים לדרייב ולגוגל דוקס, לג'מבו מייל ול-send.magicode.me,
     // אז מכניסים לתוך הקישור רצף כוכביות - והוא נשמר כקישור "שבור".
     // מי שבלי התוסף מוחק את הכוכביות מהכתובת בעצמו, ומי שעם התוסף מקבל את הקישור המתוקן.
     const MfStars = (() => {
-        const HOSTS = /^(?:[\w-]+\.)*(?:drive\.google\.com|jumbomail\.me|send\.magicode\.me)$/i;
+        const HOSTS = /^(?:[\w-]+\.)*(?:(?:drive|docs)\.google\.com|jumbomail\.me|send\.magicode\.me)$/i;
         const MARKS = "*".repeat(10);
         // רצף סימונים: כל רצף שיש בו כוכבית, או שניים ומעלה מ-# @ & ברצף (# בודד יכול להיות חלק מקישור תקין)
         const MARK_RUN = /[*#@&]*\*[*#@&]*|[#@&]{2,}/g;
         const URL_PARTS = /^(https?:\/\/)([^/?]*)(.*)$/i;
-        const HOST_WORD = "(?:[\\w-]+\\.)*(?:drive\\.google\\.com|jumbomail\\.me|send\\.magicode\\.me)";
+        const HOST_WORD = "(?:[\\w-]+\\.)*(?:(?:drive|docs)\\.google\\.com|jumbomail\\.me|send\\.magicode\\.me)";
 
         // הכתובת בלי הסימונים, רק לאתרים שהשרת חוסם
         function clean(href) {
@@ -120,7 +121,7 @@
         // סימן לקישור המלא - הלחיצה עוברת לקישור השבור, ורק שם הוא מתקן את עצמו.
         // מחזיר true אם הקישור שונה
         const originals = new WeakMap();
-        const SELECTOR = 'a[href*="drive.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
+        const SELECTOR = 'a[href*="drive.google" i], a[href*="docs.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
 
         function fixLink(link) {
             if (originals.has(link)) return false;
@@ -231,7 +232,7 @@
     }, true);
 
     // גרירה, הדבקה וכל העלאה אחרת - מתקנים ברגע השליחה
-    // קישור לדרייב, לג'מבו מייל או ל-send.magicode.me נשלח לשרת עם כוכביות, כי השרת לא שומר אותם כמו שהם
+    // קישור לדרייב ולגוגל דוקס, לג'מבו מייל או ל-send.magicode.me נשלח לשרת עם כוכביות, כי השרת לא שומר אותם כמו שהם
     const POST_API = /\/api\/v3\/(topics|posts|chats)\b/;
 
     function breakLinks(url, body) {
@@ -276,16 +277,21 @@
     };
 
     // =====================================================================
-    // הורדה: קבצי ZI ו-AP יורדים כ-ZIP ו-APK
+    // הורדה: קבצים עם סיומת שבורה (ZI, AP, JA, AR...) יורדים עם הסיומת האמיתית
     // =====================================================================
 
     const UPLOAD_PATH = /\/assets\/uploads\/files\//i;
 
+    // הסיומת האמיתית -> הצורות השבורות שלה באתר (אות שנחתכה מהסוף או מההתחלה)
     // כל צורה של הסיומת (zi, ZI, ziP...) -> סיומת אחידה באותיות קטנות
-    const NAME_FIXES = [
-        { re: /\.zip?$/i, ext: ".zip" },
-        { re: /\.apk?$/i, ext: ".apk" }
-    ];
+    const BROKEN_EXTS = {
+        zip: ["zi"], apk: ["ap"], jar: ["ja", "ar"], rar: ["ra"], exe: ["ex"], msi: ["ms"],
+        iso: ["is"], pdf: ["pd"], bat: ["ba"], dmg: ["dm"], "7z": ["7"], xapk: ["xap"], apks: ["aps"]
+    };
+    const NAME_FIXES = Object.entries(BROKEN_EXTS).map(([ext, broken]) => ({
+        re: new RegExp(`\\.(?:${[ext, ...broken].join("|")})$`, "i"),
+        ext: "." + ext
+    }));
 
     function fixName(name) {
         for (const fix of NAME_FIXES) {
@@ -1259,7 +1265,7 @@
 
         <section class="mfs-card">
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הסרת כוכביות מקישורים</span>
-            <span class="mfs-desc">קישור לדרייב, לג'מבו מייל או ל-send.magicode.me שנשמר באתר עם כוכביות (* # @ &amp;) מוצג בלי הכוכביות, אבל במתמחים הכתובת שלו נשארת שבורה. בלחיצה עוברים לקישור השבור, ושם הוא מתקן את עצמו ועובר לקובץ האמיתי.</span></span>
+            <span class="mfs-desc">קישור לדרייב ולגוגל דוקס, לג'מבו מייל או ל-send.magicode.me שנשמר באתר עם כוכביות (* # @ &amp;) מוצג בלי הכוכביות, אבל במתמחים הכתובת שלו נשארת שבורה. בלחיצה עוברים לקישור השבור, ושם הוא מתקן את עצמו ועובר לקובץ האמיתי.</span></span>
             <input type="checkbox" class="mfs-switch" data-key="unbreakLinks"></label>
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הוספת כוכביות בשליחת פוסט</span>
             <span class="mfs-desc">השרת לא שומר קישורים לאתרים האלה, אז מדביקים קישור רגיל והסקריפט מכניס לתוכו כוכביות ברגע השליחה. מי שאין לו את הסקריפט רואה את הכוכביות ומוחק אותן מהכתובת בעצמו.</span></span>
@@ -1268,7 +1274,7 @@
 
         <section class="mfs-card mfs-info">
           <span class="mfs-name">תיקון סיומות</span>
-          <span class="mfs-desc">פועל תמיד: ZIP עולה לאתר כ-ZIP אמיתי, כך שגם מי שאין לו את הסקריפט מוריד ZIP. קבצים בסיומת ZI או AP יורדים ומוצגים כ-ZIP ו-APK.</span>
+          <span class="mfs-desc">פועל תמיד: ZIP עולה לאתר כ-ZIP אמיתי, כך שגם מי שאין לו את הסקריפט מוריד ZIP. קבצים עם סיומת שבורה יורדים ומוצגים עם הסיומת האמיתית: ZI ל-ZIP, AP ל-APK, JA ו-AR ל-JAR, וכן RAR, EXE, MSI, ISO, PDF, BAT, DMG, 7Z, XAPK ו-APKS.</span>
         </section>
 
         <p class="mfs-status" role="status"></p>

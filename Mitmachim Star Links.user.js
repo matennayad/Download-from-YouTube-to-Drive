@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name        מסיר ומוסיף כוכב*ות - מטען נייד
 // @namespace   http://tampermonkey.net/
-// @version     1.1
-// @description מוסיף כוכביות לקישורים לדרייב, לג'מבו מייל ול-send.magicode.me בשליחת פוסט במתמחים טופ, ומסיר אותן בקריאה ובלחיצה
+// @version     1.2
+// @description מוסיף כוכביות לקישורים לדרייב ולגוגל דוקס, לג'מבו מייל ול-send.magicode.me בשליחת פוסט במתמחים טופ, ומסיר אותן בקריאה ובלחיצה
 // @match       https://mitmachim.top/*
 // @match       https://*.mitmachim.top/*
 // @match       https://drive.google.com/*
+// @match       https://docs.google.com/*
 // @match       https://jumbomail.me/*
 // @match       https://*.jumbomail.me/*
 // @match       https://send.magicode.me/*
@@ -38,16 +39,16 @@
 
     let settings = loadSettings();
 
-    // כוכביות בקישורים: השרת של מתמחים לא שומר קישורים לדרייב, לג'מבו מייל ול-send.magicode.me,
+    // כוכביות בקישורים: השרת של מתמחים לא שומר קישורים לדרייב ולגוגל דוקס, לג'מבו מייל ול-send.magicode.me,
     // אז מכניסים לתוך הקישור רצף כוכביות - והוא נשמר כקישור "שבור".
     // מי שבלי התוסף מוחק את הכוכביות מהכתובת בעצמו, ומי שעם התוסף מקבל את הקישור המתוקן.
     const MfStars = (() => {
-        const HOSTS = /^(?:[\w-]+\.)*(?:drive\.google\.com|jumbomail\.me|send\.magicode\.me)$/i;
+        const HOSTS = /^(?:[\w-]+\.)*(?:(?:drive|docs)\.google\.com|jumbomail\.me|send\.magicode\.me)$/i;
         const MARKS = "*".repeat(10);
         // רצף סימונים: כל רצף שיש בו כוכבית, או שניים ומעלה מ-# @ & ברצף (# בודד יכול להיות חלק מקישור תקין)
         const MARK_RUN = /[*#@&]*\*[*#@&]*|[#@&]{2,}/g;
         const URL_PARTS = /^(https?:\/\/)([^/?]*)(.*)$/i;
-        const HOST_WORD = "(?:[\\w-]+\\.)*(?:drive\\.google\\.com|jumbomail\\.me|send\\.magicode\\.me)";
+        const HOST_WORD = "(?:[\\w-]+\\.)*(?:(?:drive|docs)\\.google\\.com|jumbomail\\.me|send\\.magicode\\.me)";
 
         // הכתובת בלי הסימונים, רק לאתרים שהשרת חוסם
         function clean(href) {
@@ -115,7 +116,7 @@
         // סימן לקישור המלא - הלחיצה עוברת לקישור השבור, ורק שם הוא מתקן את עצמו.
         // מחזיר true אם הקישור שונה
         const originals = new WeakMap();
-        const SELECTOR = 'a[href*="drive.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
+        const SELECTOR = 'a[href*="drive.google" i], a[href*="docs.google" i], a[href*="jumbomail" i], a[href*="magicode" i]';
 
         function fixLink(link) {
             if (originals.has(link)) return false;
@@ -236,7 +237,7 @@
       <div class="mfs-dialog" role="dialog" aria-modal="true" aria-label="הגדרות">
         <button type="button" class="mfs-close" aria-label="סגירה">✕</button>
         <h2>מסיר ומוסיף כוכב*ות</h2>
-        <p class="mfs-sub">קישורים לדרייב, לג'מבו מייל ול-send.magicode.me במתמחים טופ</p>
+        <p class="mfs-sub">קישורים לדרייב ולגוגל דוקס, לג'מבו מייל ול-send.magicode.me במתמחים טופ</p>
 
         <section class="mfs-card">
           <label class="mfs-row"><span class="mfs-text"><span class="mfs-name">הסרת כוכביות מקישורים</span>
