@@ -1,16 +1,17 @@
 # Graph Report - download-from-youtube-to-drive  (2026-11-25)
 
 ## Corpus Check
-- 6 files · ~34,117 words
+- 8 files · ~34,377 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 2 file(s) not represented in the graph (top: (none) 2)
 
 ## Summary
-- 256 nodes · 630 edges · 13 communities
+- 258 nodes · 631 edges · 14 communities (13 shown, 1 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 27 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `10f8f4ba`
+- Built from commit: `9bd782f4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -28,6 +29,7 @@
 - collect
 - fetchPreview
 - סקריפטים למתמחים טופ (Tampermonkey)
+- CLAUDE.md
 
 ## God Nodes (most connected - your core abstractions)
 1. `startUI()` - 42 edges
@@ -37,26 +39,26 @@
 5. `createFloatingMenu()` - 13 edges
 6. `scan()` - 13 edges
 7. `send()` - 12 edges
-8. `checkAuthAndShowOptions()` - 11 edges
-9. `submitChannelJob()` - 11 edges
-10. `triggerDownload()` - 11 edges
+8. `checkAuthAndContinue()` - 11 edges
+9. `createFloatingMenu()` - 11 edges
+10. `showEmailModal()` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `decorateFiles()` --calls--> `fixName()`  [EXTRACTED]
-  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 10 → community 8_
 - `collect()` --calls--> `isSiteHost()`  [EXTRACTED]
-  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 6 → community 10_
-- `decorateFiles()` --calls--> `toUrl()`  [EXTRACTED]
-  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 6 → community 8_
-- `buildImageTile()` --calls--> `loadSize()`  [EXTRACTED]
-  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 8 → community 9_
+  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 10 → community 6_
 - `scan()` --calls--> `collect()`  [EXTRACTED]
   Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 10 → community 7_
+- `decorateFiles()` --calls--> `fixName()`  [EXTRACTED]
+  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 10 → community 8_
+- `buildLinkCard()` --calls--> `getPreview()`  [EXTRACTED]
+  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 11 → community 9_
+- `decorateLinks()` --calls--> `getPreview()`  [EXTRACTED]
+  Mitmachim ZI to ZIP.user.js → Mitmachim ZI to ZIP.user.js  _Bridges community 11 → community 6_
 
 ## Import Cycles
 - None detected.
 
-## Communities (13 total, 0 thin omitted)
+## Communities (14 total, 1 thin omitted)
 
 ### Community 0 - "startUI"
 Cohesion: 0.08
@@ -109,6 +111,9 @@ Nodes (5): decodeBytes(), decodeEntities(), fetchPreview(), getPreview(), parseM
 ### Community 12 - "סקריפטים למתמחים טופ (Tampermonkey)"
 Cohesion: 0.40
 Nodes (4): Download-from-YouTube-to-Drive, מסיר ומוסיף כוכב*ות, סקריפטים למתמחים טופ (Tampermonkey), תיקון ZI ל-ZIP במתמחים טופ - הסקריפט המלא
+
+## Knowledge Gaps
+- **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
